@@ -150,6 +150,10 @@ def slicefy(
 
         If a single int/slice is given, it will be applied to all the axes.
 
+    ndim : int, optional
+        The number of dimensions of the image to convert `rule` into slice.
+        (i.e., the length of the final output)
+
     order_xyz : bool, optional
         Whether the order of rule is in xyz order. Works only if the `rule` is
         bezel-like (int or list of int). If it is slice-like, `rule` must be in
