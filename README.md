@@ -1,4 +1,7 @@
 # astro-ndslice
+
+[![DOI](https://zenodo.org/badge/601666411.svg)](https://zenodo.org/badge/latestdoi/601666411)
+
 A collection of simple tools to slicing astronomical images (many are applicable to general ndarray).
 
 * Module `list`: Contains some universally usable convenience functions.
