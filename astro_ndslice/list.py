@@ -5,17 +5,12 @@ from collections import abc
 from typing import Any
 
 import numpy as np
-from astropy.io import fits
-from astropy.nddata import CCDData
 
 __all__ = [
-    "ASTROPY_CCD_TYPES",
     "is_list_like",
     "listify",
     "ndfy",
 ]
-
-ASTROPY_CCD_TYPES = (CCDData, fits.PrimaryHDU, fits.ImageHDU)  # fits.CompImageHDU ?
 
 
 def is_list_like(
