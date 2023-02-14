@@ -48,7 +48,7 @@ def offseted_shape(
     offset_order_xyz: bool = True,
     intify_offsets: bool = False,
     pythonize_offsets: bool = True
-) -> tuple(np.ndarray, tuple):
+) -> tuple[np.ndarray, tuple]:
     '''shapes and offsets must be in the order of python/numpy (i.e., z, y, x order).
 
     Paramters
