@@ -77,6 +77,10 @@ def offseted_shape(
         Whether `offsets` are in xyz order. If so, those will be flipped to
         pythonic order. Default: `True`
 
+    pythonize_offsets : bool, optional
+        Whether the returned `_offsets` are in pythonic order (zyx order).
+        Default: `True`
+
     Returns
     -------
     _offsets : ndarray
