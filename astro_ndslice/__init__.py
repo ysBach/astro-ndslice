@@ -1,3 +1,3 @@
-from .list import *
+from .lists import *
 from .slices import *
 from .offset import *
