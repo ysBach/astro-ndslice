@@ -7,6 +7,72 @@ __all__ = [
 ]
 
 
+# TODO: add `coord` to select whether image/physical. If physical, header is required.
+def slicefy(
+    rule: str | int | list[int] | list[slice] | None = None,
+    ndim: int = 2,
+    order_xyz: bool = True
+) -> list[slice] | np.ndarray:
+    """ Parse the rule by trimsec, bezels, or slices (in this priority).
+
+    Parameters
+    ----------
+    rule : str, int, list of int, list of slice, None, optional
+        It can have several forms::
+
+          * str: The FITS convention section to trim (e.g., IRAF TRIMSEC).
+            Example is ``'[1:2,:]'``.
+          * [list of] int: The number of pixels to trim from the edge of the
+            image (bezel). Example is ``[1, 2]``.
+          * [list of] slice: The slice of each axis (`slice(start, stop,
+            step)`). Example is ``[slice(1, 2), slice(2, 3)]``.
+
+        If a single int/slice is given, it will be applied to all the axes.
+
+    ndim : int, optional
+        The number of dimensions of the image to convert `rule` into slice.
+        (i.e., the length of the final output)
+
+    order_xyz : bool, optional
+        Whether the order of rule is in xyz order. Works only if the `rule` is
+        bezel-like (int or list of int). If it is slice-like, `rule` must be in
+        the pythonic order (i.e., ``[slice_for_axis0, slice_for_axis1, ...]``).
+
+    >>> np.eye(5)[slicefy('[1:2,:]')]
+    # array([[1., 0.],
+    #       [0., 1.],
+    #       [0., 0.],
+    #       [0., 0.],
+    #       [0., 0.]])
+    >>> np.eye(5)[slicefy(1)]  # bezel by 1 pix
+    # array([[1., 0., 0.],
+    #    [0., 1., 0.],
+    #    [0., 0., 1.]])
+    >>> np.eye(5)[slicefy((1, 2))]  # bezel by (1, 1), (2, 2) pix (x/y dir)
+    # array([[0., 1., 0.]])
+    >>> np.eye(5)[slicefy(slice(1, -1, 2))]  # data[1:-1:2, 1:-1:2]
+    # array([[1., 0.],
+    #    [0., 1.]])
+    """
+    if rule is None:
+        return tuple([slice(None, None, None) for _ in range(ndim)])
+    elif isinstance(rule, str):
+        fs = np.atleast_1d(rule)
+        sl = [slice_from_string(sect, fits_convention=True) for sect in fs]
+        return sl[0] if len(sl) == 1 else tuple(sl)
+    elif is_list_like(rule):
+        if isinstance(rule[0], slice):
+            return ndfy(rule, ndim)
+        else:  # bezels
+            return bezel2slice(rule, order_xyz=order_xyz)
+    elif isinstance(rule, slice):
+        return ndfy(rule, ndim)
+    elif isinstance(rule, int):  # bezels
+        return bezel2slice(rule, order_xyz=order_xyz)
+    else:
+        raise TypeError(f"rule must be a string or a list of int/slice. Now {type(rule)=}")
+
+
 # Directly imported from ccdproc.utils.slices
 def slice_from_string(
     string: str,
@@ -23,6 +89,10 @@ def slice_from_string(
         If True, assume the input string follows the FITS convention for
         indexing: the indexing is one-based (not zero-based) and the first
         axis is that which changes most rapidly as the index increases.
+
+        ..note::
+            `slice_from_string` is almost always used with
+            ``fits_convention=True``.
 
     Returns
     -------
@@ -128,76 +198,9 @@ def _defitsify_slice(slices: list) -> list:
     return python_slice
 
 
-# TODO: add `coord` to select whether image/physical. If physical, header is required.
-def slicefy(
-    rule: str | int | list[int] | list[slice] | None = None,
-    ndim: int = 2,
-    order_xyz: bool = True
-) -> list[slice] | np.ndarray:
-    """ Parse the rule by trimsec, bezels, or slices (in this priority).
-
-    Parameters
-    ----------
-    rule : str, int, list of int, list of slice, None, optional
-        It can have several forms::
-
-          * str: The FITS convention section to trim (e.g., IRAF TRIMSEC).
-            Example is ``'[1:2,:]'``.
-          * [list of] int: The number of pixels to trim from the edge of the
-            image (bezel). Example is ``[1, 2]``.
-          * [list of] slice: The slice of each axis (`slice(start, stop,
-            step)`). Example is ``[slice(1, 2), slice(2, 3)]``.
-
-        If a single int/slice is given, it will be applied to all the axes.
-
-    ndim : int, optional
-        The number of dimensions of the image to convert `rule` into slice.
-        (i.e., the length of the final output)
-
-    order_xyz : bool, optional
-        Whether the order of rule is in xyz order. Works only if the `rule` is
-        bezel-like (int or list of int). If it is slice-like, `rule` must be in
-        the pythonic order (i.e., ``[slice_for_axis0, slice_for_axis1, ...]``).
-
-    >>> np.eye(5)[slicefy('[1:2,:]')]
-    # array([[1., 0.],
-    #       [0., 1.],
-    #       [0., 0.],
-    #       [0., 0.],
-    #       [0., 0.]])
-    >>> np.eye(5)[slicefy(1)]  # bezel by 1 pix
-    # array([[1., 0., 0.],
-    #    [0., 1., 0.],
-    #    [0., 0., 1.]])
-    >>> np.eye(5)[slicefy((1, 2))]  # bezel by (1, 1), (2, 2) pix (x/y dir)
-    # array([[0., 1., 0.]])
-    >>> np.eye(5)[slicefy(slice(1, -1, 2))]  # data[1:-1:2, 1:-1:2]
-    # array([[1., 0.],
-    #    [0., 1.]])
-    """
-    if rule is None:
-        return tuple([slice(None, None, None) for _ in range(ndim)])
-    elif isinstance(rule, str):
-        fs = np.atleast_1d(rule)
-        sl = [slice_from_string(sect, fits_convention=True) for sect in fs]
-        return sl[0] if len(sl) == 1 else tuple(sl)
-    elif is_list_like(rule):
-        if isinstance(rule[0], slice):
-            return ndfy(rule, ndim)
-        else:  # bezels
-            bezels = ndfy([ndfy(b, 2, default=0) for b in listify(rule)], ndim)
-            return bezel2slice(bezels, order_xyz=order_xyz)
-    elif isinstance(rule, slice):
-        return ndfy(rule, ndim)
-    elif isinstance(rule, int):  # bezels
-        bezels = ndfy([ndfy(b, 2, default=0) for b in listify(rule)], ndim)
-        return bezel2slice(bezels, order_xyz=order_xyz)
-    else:
-        raise TypeError(f"rule must be a string or a list of int/slice. Now {type(rule)=}")
-
-
 def bezel2slice(
     bezels: list[list[int]],
+    ndim:int = 2,
     order_xyz: bool = True
 ) -> tuple[slice]:
     """ Convert bezels to slice objects
@@ -208,6 +211,9 @@ def bezel2slice(
         Must be a list of list of int. Each list of int is in the
         form of ``[lower, upper]``, i.e., the first ``lower`` and last
         ``upper`` rows/columns are ignored.
+
+    ndim : int, optional.
+        The number of dimensions of the image to convert `bezels` into slice.
 
     order_xyz : bool, optional.
         Whether `bezel` in xyz order or not (python order:
@@ -228,6 +234,9 @@ def bezel2slice(
     This confusing behavior is due to the (stupid and/or inconsistent?) way
     our world represents xy-coordinates.
     """
+    bezels = ndfy([ndfy(b, length=2, default=0) for b in listify(bezels)], ndim)
+    #                      ^^^^^^^^
+    # length should be 2 (one for upper & one for lower)
     bezels = np.atleast_2d(bezels)
     bezels = bezels[::-1] if order_xyz else bezels
     return tuple([slice(b[0], None if b[1] == 0 else -b[1]) for b in bezels])
