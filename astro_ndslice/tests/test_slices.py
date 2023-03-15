@@ -1,8 +1,9 @@
-from astro_ndslice import slice_from_string, slicefy, bezel2slice
-from astro_ndslice.slices import _defitsify_slice
-import pytest
 import numpy as np
+import pytest
 from numpy.testing import assert_array_almost_equal as assert_array
+
+from astro_ndslice import bezel2slice, slice_from_string, slicefy
+from astro_ndslice.slices import _defitsify_slice
 
 
 def test_slice_from_string():
