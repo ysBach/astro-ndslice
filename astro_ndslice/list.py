@@ -91,24 +91,6 @@ def listify(
     made as [None, None, ...], rather than an empty list, regardless of
     `empty_if_none`.
 
-    Tests
-    -----
-    assert listify(12) == [12]
-    assert listify([1]) == [1]
-    assert listify(12, scalar2list=False) == 12
-    assert listify([1], scalar2list=False) == [1]
-    assert listify(None) == []
-    assert listify(None, none2list=True) == [None]
-    assert listify([1, 2]) == [1, 2]
-    assert listify([1, "a"]) == [1, "a"]
-    with pytest.raises(ValueError):
-        listify([1, 2], "a", [3, 4, 5])
-    # Below are the most important cases `listify` is useful
-    assert listify("ab") == ["ab"]
-    assert listify("ab", scalar2list=False) == "ab"
-    assert listify([1, 2], "a") == [[1, 2], ['a', 'a']]
-    assert listify([1, 2], "a", None) == [[1, 2], ['a', 'a'], [None, None]]
-
     Timing on MBP 14" [2021, macOS 12.2, M1Pro(6P+2E/G16c/N16c/32G)]:
     %timeit yfu.listify([12])
     8.92 µs +- 434 ns per loop (mean +- std. dev. of 7 runs, 100000 loops each)
@@ -142,14 +124,15 @@ def listify(
 def ndfy(
     item,
     length: int | None = None,
-    default: Any = 0
+    default: Any = None
 ):
-    """ Make an item to ndarray of length.
+    """ Make an item to ndarray of `length`.
 
     Parameters
     ----------
     item : None, general object, list-like
-        The item to be made into an ndarray. If `None`, `default` is used.
+        The item to be made into an ndarray. If `None`, it will be filled by
+        `default`.
 
     length : int, optional.
         The length of the final ndarray. If `None`, the length of the input is
@@ -157,36 +140,36 @@ def ndfy(
 
     default : general object
         The default value to be used if `item` or any element of `item` is
-        `None`.
+        `None`. Default is `None`
 
     Notes
     -----
-    Useful for the cases when bezels, sigma, ... are needed. Example case when
-    you want to make ((20, 20), (20, 20)) bezels from given ``bezels = 20``::
-    >>> arr = np.arange(10).reshape(2, 5)  # 2-D array
-    >>> bezels1 = 20
-    >>> bezels2 = (20, 20)
-    >>> bezels3 = ((20, 20), (20, 20))
-    >>> ans = [[20, 20], [20, 20]]
-    >>> assert ndfy([ndfy(b, 2, default=0) for b in listify(bezels1)], arr.ndim) == ans
-    >>> assert ndfy([ndfy(b, 2, default=0) for b in listify(bezels2)], arr.ndim) == ans
-    >>> assert ndfy([ndfy(b, 2, default=0) for b in listify(bezels3)], arr.ndim) == ans
+    Useful for the cases when bezels, sigma, ... are needed. For example, if
+    ``bezel_nd = [ndfy(b, length=arr.ndim) for b in listify(bezels)]``
+    ``ndfy(bezel_nd, length=arr.ndim)`` will give correct bezel, e.g., ``[[10,
+    10], [10, 10]]`` for all of the following cases::
 
-    Note that 2-element bezels is ambiguous: ``[a, b]`` may mean either (1)
-    both bezels in x-axis to be ``a`` and both bezels in y-axis to be ``b`` or
-    (2) both x-/y-axis have bezels ``[a, b]`` for lower/upper regions. `ndfy`
-    uses the first assumption::
-    >>> ndfy([ndfy(b, 2, default=0) for b in listify([(30, 40)])], arr.ndim)
-    >>> # [[30, 30], [40, 40]]
-    Because of this, it will raise ValueError if `arr.ndim != bezels.size`.
+      1. ``bezel=10``
+      2. ``bezel=[10, 10]``,
+      3. ``bezel=[[10, 10], [10, 10]]``.
+
+    It is also useful for `slicefy`.
+
+    Note that some cases can be ambiguous: ``ndfy([[1, 2, 3]], length=3)`` may mean either::
+
+      1. ``((1, 2, 3), (1, 2, 3), (1, 2, 3))``
+      2. ``((1, 1, 1), (2, 2, 2), (3, 3, 3))``
+
+    `ndfy` uses the first assumption.
     """
-    item = listify(item)
-    item = [default if i is None else i for i in item]
+    item = [default if i is None else i for i in listify(item, none2list=True)]
+    item_length = len(item)
 
-    if (length is None) or (len(item) == length):
+    if (length is None) or (item_length == length):
         return item
-    elif len(item) != 1:
-        raise ValueError(f"Length of item must be 1 or {length=}. Now it is {len(item)}.")
+    elif item_length != 1:
+        _length = "1" if item_length == 1 else f"1 or `length`(={length})"
+        raise ValueError(f"`len(item)` must be {_length}. Now it is {item_length}.")
 
-    # Now, len(item) == 1
+    # Now, item_length == 1
     return [item[0] for _ in range(length)]
