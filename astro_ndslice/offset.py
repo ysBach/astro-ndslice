@@ -291,7 +291,7 @@ def calc_offset_wcs(
         if loc == "center":
             _loc = np.atleast_1d(w._naxis)/2
         elif loc == "origin":
-            _loc = [0.]*w.naxis
+            _loc = np.array([0.]*w.naxis)
         else:
             _loc = np.atleast_1d(loc)
 
@@ -318,7 +318,7 @@ def calc_offset_physical(
         target,
         reference=None,
         order_xyz: bool=True,
-        ignore_nondiag_ltm: bool=True,
+        ignore_ltm: bool=True,
         intify_offset: bool=False
 ) -> np.ndarray:
     """ The pixel offset by physical-coordinate information in referene.
@@ -339,10 +339,11 @@ def calc_offset_physical(
         ``[::-1]`` of the former).
         Default is `True`.
 
-    ignore_nondiag_ltm : bool, optional.
-        Whether to assuem the LTM matrix is diagonal. If it is not and
-        ``ignore_nondiag_ltm=False``, a `NotImplementedError` will be raised,
-        i.e., non-diagonal LTM matrices are not supported.
+    ignore_ltm : bool, optional.
+        Whether to skip checking the LTM matrix (whether it is diagonal).
+        Generally, non-diagnoal LTM is rare, so you can save computation time
+        by setting `ignore_ltm=True`. If `ignore_ltm=False` and LTM is not
+        diagonal, a `NotImplementedError` will be raised.
 
     Notes
     -----
@@ -357,14 +358,17 @@ def calc_offset_physical(
         for i in range(ndim):
             for j in range(ndim):
                 try:
-                    assert float(hdr["LTM{i}_{j}"]) == 1.0*(i == j)
+                    if i == j:
+                        assert float(hdr[f"LTM{i+1}_{j+1}"]) != 0.
+                    else:
+                        assert float(hdr[f"LTM{i+1}_{j+1}"]) == 0.
                 except (KeyError, IndexError):
                     continue
                 except (AssertionError):
                     raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
 
             try:  # Sometimes LTM matrix is saved as ``LTMi``, not ``LTMi_j``.
-                assert float(target["LTM{i}"]) == 1.0
+                assert float(hdr[f"LTM{i+1}"]) == 1.0
             except (KeyError, IndexError):
                 continue
             except (AssertionError):
@@ -377,7 +381,7 @@ def calc_offset_physical(
         if not isinstance(reference, Header):
             raise TypeError("reference must be an instance of astropy.io.fits.Header.")
 
-    if not ignore_nondiag_ltm:
+    if not ignore_ltm:
         _check_ltm(target)
         if do_ref:
             _check_ltm(reference)
