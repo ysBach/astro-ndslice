@@ -80,3 +80,6 @@ def test_ndfy():
 
     bezel = [[1, 2]]
     assert (ndfy(bezel, arr.ndim) == [[1, 2], [1, 2]])
+
+    with pytest.raises(ValueError):
+        ndfy([0, 1], length=3)  # mismatch
