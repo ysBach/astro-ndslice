@@ -1,27 +1,26 @@
 import numpy as np
 import pytest
-from io import StringIO
-from numpy.testing import assert_array_almost_equal as assert_array
+from numpy.testing import assert_allclose
 
 from astro_ndslice import (calc_offset_physical, calc_offset_wcs,
                            offseted_shape, offsets2slice, regularize_offsets)
 
 
 def test_regularize_offsets():
-    assert_array(
+    assert_allclose(
         regularize_offsets([[0, 0, 0], [0, 1, 2], [1, 1.5, 1]]),
         np.array([[0. , 0. , 0. ],
                   [2. , 1. , 0. ],
                   [1. , 1.5, 1. ]])
     )
-    assert_array(
+    assert_allclose(
         regularize_offsets([[0, 0, 0], [0, 1, 2], [1, 1.5, 1]], intify_offsets=True),
         np.array([[0, 0, 0],
                   [2, 1, 0],
                   [1, 2, 1]])
     )
 
-    assert_array(
+    assert_allclose(
         regularize_offsets([[0, 0, 0], [0, 1, 2], [1, 1.5, 1]], offset_order_xyz=False),
         np.array([[0. , 0. , 0. ],
                   [0. , 1. , 2. ],
@@ -35,7 +34,7 @@ def test_offseted_shape():
 
     res = offseted_shape(shapes, offsets, method="outer", offset_order_xyz=True,
                          intify_offsets=False, pythonize_offsets=True)
-    assert_array(
+    assert_allclose(
         res[0],
         np.array([[1. , 2. ],
                   [1. , 0. ],
@@ -43,10 +42,9 @@ def test_offseted_shape():
     )
     assert res[1] == (11, 13)
 
-    # !! Not a likely use-case...?
     res = offseted_shape(shapes, offsets, method="outer", offset_order_xyz=True,
                          intify_offsets=False, pythonize_offsets=False)
-    assert_array(
+    assert_allclose(
         res[0],
         np.array([[2. , 1. ],
                   [0. , 1. ],
@@ -56,7 +54,7 @@ def test_offseted_shape():
 
     res = offseted_shape(shapes, offsets, method="outer", offset_order_xyz=True,
                          intify_offsets=True, pythonize_offsets=True)
-    assert_array(
+    assert_allclose(
         res[0],
         np.array([[1, 2],
                   [1, 0],
@@ -64,10 +62,9 @@ def test_offseted_shape():
     )
     assert res[1] == (11, 13)
 
-    # !! Not a likely use-case...?
     res = offseted_shape(shapes, offsets, method="outer", offset_order_xyz=False,
                          intify_offsets=False, pythonize_offsets=True)
-    assert_array(
+    assert_allclose(
         res[0],
         np.array([[2. , 1. ],
                   [0. , 1. ],
@@ -77,7 +74,7 @@ def test_offseted_shape():
 
     res = offseted_shape(shapes, offsets, method="inner", offset_order_xyz=True,
                          intify_offsets=False, pythonize_offsets=True)
-    assert_array(
+    assert_allclose(
         res[0],
         np.array([[1. , 2. ],
                   [1. , 0. ],
@@ -110,7 +107,6 @@ def test_offsets2slice():
                 [slice(1, 2, None), slice(1, 11, None), slice(0, 10, None)],
                 [slice(2, 3, None), slice(0, 10, None), slice(3, 13, None)]])
 
-    # !! Not a likely use-case...?
     assert (offsets2slice(shapes, offsets, method="outer", shape_order_xyz=False,
                           offset_order_xyz=False, outer_for_stack=True,
                           fits_convention=False)
@@ -118,7 +114,6 @@ def test_offsets2slice():
                 [slice(1, 2, None), slice(0, 10, None), slice(1, 11, None)],
                 [slice(2, 3, None), slice(3, 13, None), slice(0, 10, None)]])
 
-    # !! Not a likely use-case...?
     assert (offsets2slice(shapes, offsets, method="outer", shape_order_xyz=False,
                           offset_order_xyz=True, outer_for_stack=False,
                           fits_convention=False)
@@ -126,7 +121,6 @@ def test_offsets2slice():
                 [slice(1, 11, None), slice(0, 10, None)],
                 [slice(0, 10, None), slice(3, 13, None)]])
 
-    # !! Not a likely use-case...?
     assert (offsets2slice(shapes, offsets, method="outer", shape_order_xyz=False,
                           offset_order_xyz=True, outer_for_stack=True,
                           fits_convention=True)
@@ -200,42 +194,45 @@ CDELT1  =         -0.001388889
 CDELT2  =          0.001388889
 CROTA2  =             0.000000
 EQUINOX =               2000.0""", sep="\n"))
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="center", loc_reference="center",
                         order_xyz=True, intify_offset=False),
-        np.array([1.9, 0.0])
+        np.array([1.9, 0.0]),
+        atol=1e-9
     )
 
-    # !! Not a likely use-case...?
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="center", loc_reference="origin",
                         order_xyz=True, intify_offset=False),
-        np.array([362.4, 360. ])
+        np.array([362.4, 360. ]),
+        atol=1e-9
     )
 
-    # !! Not a likely use-case...?
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="origin", loc_reference="center",
                         order_xyz=True, intify_offset=False),
-        np.array([-358.6, -360. ])
+        np.array([-358.6, -360. ]),
+        atol=1e-9
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="center", loc_reference="center",
                         order_xyz=True, intify_offset=True),
         np.array([2, 0])
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="center", loc_reference="center",
                         order_xyz=False, intify_offset=False),
-        np.array([0.0, 1.9])
+        np.array([0.0, 1.9]),
+        atol=1e-9
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_wcs(w1, w2, loc_target="center", loc_reference=(350, 350),
                         order_xyz=True, intify_offset=False),
-        np.array([12.4, 10. ])
+        np.array([12.4, 10. ]),
+        atol=1e-9
     )
 
     with pytest.raises(TypeError):
@@ -287,45 +284,42 @@ LTM2  =                    3.0""", sep="\n")
 NAXIS   =                    2 / number of array dimensions
 NAXIS1  =                   91
 NAXIS2  =                   91""", sep="\n")
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=None, order_xyz=True,
                              ignore_ltm=True, intify_offset=False),
         np.array([ -9.5, -19])
     )
 
-    # !! Not a likely use-case...?
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=None, order_xyz=False,
                              ignore_ltm=True, intify_offset=False),
         np.array([-19, -9.5])
     )
 
-    # !! Not a likely use-case...?
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=None, order_xyz=True,
                              ignore_ltm=False, intify_offset=False),
         np.array([ -9.5, -19])
     )
-    # !! Not a likely use-case...?
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr3, reference=None, order_xyz=True,
                              ignore_ltm=False, intify_offset=False),
         np.array([ 0. , -1.5])
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=None, order_xyz=True,
                              ignore_ltm=True, intify_offset=True),
         np.array([ -10, -19])
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=hdr2, order_xyz=True,
                              ignore_ltm=True, intify_offset=False),
         np.array([ -9.5, -17.5])
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=hdr3, order_xyz=True,
                              ignore_ltm=True, intify_offset=False),
         np.array([ -9.5, -17.5])
@@ -343,12 +337,12 @@ NAXIS2  =                   91""", sep="\n")
     with pytest.raises(TypeError):
         calc_offset_physical(hdr, reference="asdf")
 
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr5),
         np.array([ 0, 0])
     )
 
-    assert_array(
+    assert_allclose(
         calc_offset_physical(hdr, reference=hdr5),
         np.array([ -9.5, -19.])
     )
