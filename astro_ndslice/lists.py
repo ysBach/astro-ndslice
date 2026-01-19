@@ -27,7 +27,7 @@ def is_list_like(
     allow_sets : bool, optional.
         If this parameter is `False`, sets will not be considered list-like.
         Default: `True`
-    func : funtional object, optional.
+    func : functional object, optional.
         The function to be applied to each element. Useful ones are `all` and
         `any`.
         Default: `all`
@@ -64,7 +64,7 @@ def listify(
     scalar2list: bool = True,
     none2list: bool = False
 ) -> list:
-    """Make multiple object into list of same length.
+    """Make multiple objects into list of same length.
 
     Parameters
     ----------
@@ -125,18 +125,18 @@ def ndfy(
     item,
     length: int | None = None,
     default: Any = None
-):
-    """ Make an item to ndarray of `length`.
+) -> list:
+    """ Make an item to a list of `length`.
 
     Parameters
     ----------
     item : None, general object, list-like
-        The item to be made into an ndarray. If `None`, it will be filled by
+        The item to be made into a list. If `None`, it will be filled by
         `default`.
 
     length : int, optional.
-        The length of the final ndarray. If `None`, the length of the input is
-        used (if `item` is a scalar, a length-1 array is returned).
+        The length of the final list. If `None`, the length of the input is
+        used (if `item` is a scalar, a length-1 list is returned).
 
     default : general object
         The default value to be used if `item` or any element of `item` is
@@ -172,4 +172,4 @@ def ndfy(
         raise ValueError(f"`len(item)` must be {_length}. Now it is {item_length}.")
 
     # Now, item_length == 1
-    return [item[0] for _ in range(length)]
+    return item * length

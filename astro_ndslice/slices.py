@@ -90,7 +90,7 @@ def slice_from_string(
         indexing: the indexing is one-based (not zero-based) and the first
         axis is that which changes most rapidly as the index increases.
 
-        ..note::
+        .. note::
             `slice_from_string` is almost always used with
             ``fits_convention=True``.
 

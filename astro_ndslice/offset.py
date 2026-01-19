@@ -49,10 +49,10 @@ def offseted_shape(
     intify_offsets: bool = False,
     pythonize_offsets: bool = True
 ) -> tuple[np.ndarray, tuple]:
-    '''shapes and offsets must be in the order of python/numpy (i.e., z, y, x order).
+    """shapes and offsets must be in the order of python/numpy (i.e., z, y, x order).
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     shapes : ndarray
         The shapes of the arrays to be processed. It must have the shape of
         ``nimage`` by ``ndim``. The order of shape must be pythonic (i.e.,
@@ -89,7 +89,8 @@ def offseted_shape(
 
     shape_out : tuple
         The shape of the array depending on the `method`.
-    '''
+    """
+
     _offsets = regularize_offsets(
         offsets,
         offset_order_xyz=offset_order_xyz,
@@ -158,13 +159,13 @@ def offsets2slice(
         respectively.
 
     outer_for_stack : bool, optional.
-        If `True`(default), the output slice is the slice in tne ``N+1``-D
+        If `True`(default), the output slice is the slice in the ``N+1``-D
         array, which will be constructed before combining them along
         ``axis=0``. That is, ``comb = np.nan*np.ones(_offseted_shape(shapes,
         offsets, method='outer'))`` and ``comb[slices[i]] = images[i]``. Then a
         median combine, for example, is done by ``np.nanmedian(comb, axis=0)``.
-        If ``stack_outer=False``, ``slices[i]`` will be
-        ``slices_with_stack_outer_True[i][1:]``.
+        If ``outer_for_stack=False``, ``slices[i]`` will be
+        ``slices_with_outer_for_stack_True[i][1:]``.
 
     fits_convention : bool, optional.
         Whether to return the slices in FITS convention (xyz order, 1-indexing,
@@ -253,7 +254,7 @@ def calc_offset_wcs(
         order_xyz: bool = True,
         intify_offset: bool = False
 ) -> np.ndarray:
-    """ The pixel offset of target's location when using WCS in referene.
+    """ The pixel offset of target's location when using WCS in reference.
 
     Parameters
     ----------
@@ -314,6 +315,28 @@ def calc_offset_wcs(
         return offset[::-1]
 
 
+def _check_ltm(hdr):
+    ndim = hdr["NAXIS"]
+    for i in range(ndim):
+        for j in range(ndim):
+            try:
+                if i == j:
+                    assert float(hdr[f"LTM{i+1}_{j+1}"]) != 0.
+                else:
+                    assert float(hdr[f"LTM{i+1}_{j+1}"]) == 0.
+            except (KeyError, IndexError):
+                continue
+            except (AssertionError):
+                raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
+
+        try:  # Sometimes LTM matrix is saved as ``LTMi``, not ``LTMi_j``.
+            assert float(hdr[f"LTM{i+1}"]) == 1.0
+        except (KeyError, IndexError):
+            continue
+        except (AssertionError):
+            raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
+
+
 def calc_offset_physical(
         target,
         reference=None,
@@ -321,7 +344,7 @@ def calc_offset_physical(
         ignore_ltm: bool=True,
         intify_offset: bool=False
 ) -> np.ndarray:
-    """ The pixel offset by physical-coordinate information in referene.
+    """ The pixel offset by physical-coordinate information in reference.
 
     Parameters
     ----------
@@ -341,9 +364,12 @@ def calc_offset_physical(
 
     ignore_ltm : bool, optional.
         Whether to skip checking the LTM matrix (whether it is diagonal).
-        Generally, non-diagnoal LTM is rare, so you can save computation time
+        Generally, non-diagonal LTM is rare, so you can save computation time
         by setting `ignore_ltm=True`. If `ignore_ltm=False` and LTM is not
         diagonal, a `NotImplementedError` will be raised.
+
+    intify_offset : bool, optional.
+        Whether to convert the offset to integer or not. Default is `False`.
 
     Notes
     -----
@@ -352,27 +378,6 @@ def calc_offset_physical(
     accepted because astropy's wcs module does not parse LTV/LTM from header.
     """
     from astropy.io.fits import Header
-
-    def _check_ltm(hdr):
-        ndim = hdr["NAXIS"]
-        for i in range(ndim):
-            for j in range(ndim):
-                try:
-                    if i == j:
-                        assert float(hdr[f"LTM{i+1}_{j+1}"]) != 0.
-                    else:
-                        assert float(hdr[f"LTM{i+1}_{j+1}"]) == 0.
-                except (KeyError, IndexError):
-                    continue
-                except (AssertionError):
-                    raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
-
-            try:  # Sometimes LTM matrix is saved as ``LTMi``, not ``LTMi_j``.
-                assert float(hdr[f"LTM{i+1}"]) == 1.0
-            except (KeyError, IndexError):
-                continue
-            except (AssertionError):
-                raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
 
     do_ref = reference is not None
     if not isinstance(target, Header):
