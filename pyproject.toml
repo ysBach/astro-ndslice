@@ -1,5 +1,45 @@
 [build-system]
-requires = [
-    "setuptools"
-]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "astro-ndslice"
+version = "0.3"
+description = "Convenience tools for slicing images & calculating offsets before combinations (focusing on converting astronomical FITS/IRAF and python conventions)"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { file = "LICENSE" }
+authors = [{ name = "Yoonsoo P. Bach", email = "ysbach93@gmail.com" }]
+keywords = ["astronomy", "data reduction", "image analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.23"]
+
+[project.urls]
+Source = "https://github.com/ysBach/astro-ndslice"
+Tracker = "https://github.com/ysBach/astro-ndslice/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["astro_ndslice/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
