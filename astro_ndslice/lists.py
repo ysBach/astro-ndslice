@@ -2,7 +2,7 @@
 Simple tools to make lists
 """
 from collections import abc
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -16,7 +16,7 @@ __all__ = [
 def is_list_like(
     *objs,
     allow_sets: bool = True,
-    func: object = all
+    func: Callable = all
 ) -> bool:
     """ Check if inputs are list-like
 
@@ -168,8 +168,9 @@ def ndfy(
     if (length is None) or (item_length == length):
         return item
     elif item_length != 1:
-        _length = "1" if item_length == 1 else f"1 or `length`(={length})"
-        raise ValueError(f"`len(item)` must be {_length}. Now it is {item_length}.")
+        raise ValueError(
+            f"`len(item)` must be 1 or `length`(={length}). Now it is {item_length}."
+        )
 
     # Now, item_length == 1
     return item * length

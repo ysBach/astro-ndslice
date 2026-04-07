@@ -12,7 +12,7 @@ def slicefy(
     rule: str | int | list[int] | list[slice] | None = None,
     ndim: int = 2,
     order_xyz: bool = True
-) -> list[slice] | np.ndarray:
+) -> tuple:
     """ Parse the rule by trimsec, bezels, or slices (in this priority).
 
     Parameters

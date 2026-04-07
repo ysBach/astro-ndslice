@@ -48,7 +48,7 @@ def offseted_shape(
     offset_order_xyz: bool = True,
     intify_offsets: bool = False,
     pythonize_offsets: bool = True
-) -> tuple[np.ndarray, tuple]:
+) -> tuple[np.ndarray, tuple[int, ...]]:
     """shapes and offsets must be in the order of python/numpy (i.e., z, y, x order).
 
     Parameters
@@ -202,6 +202,9 @@ def offsets2slice(
     if _shapes.shape != _offsets.shape:
         raise ValueError("shapes and offsets must have the identical shape.")
 
+    def _empty_tmp(_i):
+        return []
+
     if method == 'outer':
         starts = _offsets
         stops = _offsets + _shapes
@@ -209,7 +212,7 @@ def offsets2slice(
             def _initial_tmp(i):
                 return [f"{i + 1}:{i + 1}"] if fits_convention else [slice(i, i + 1, None)]
         else:
-            _initial_tmp = lambda i: []  # initialized empty list regardless of argument
+            _initial_tmp = _empty_tmp
     elif method == 'inner':
         offmax = np.max(_offsets, axis=0)
         if np.any(np.min(_shapes + _offsets, axis=0) <= offmax):
@@ -222,7 +225,7 @@ def offsets2slice(
         #   the former 1-D array is broadcast s.t. it is "tile"d along axis=-1.
         starts = offmax - _offsets
         stops = np.min(_offsets + _shapes, axis=0) - _offsets
-        _initial_tmp = lambda i: []  # initialized empty list regardless of argument
+        _initial_tmp = _empty_tmp
     else:
         raise ValueError("method unacceptable (use one of 'inner', 'outer').")
 
@@ -340,9 +343,9 @@ def _check_ltm(hdr):
 def calc_offset_physical(
         target,
         reference=None,
-        order_xyz: bool=True,
-        ignore_ltm: bool=True,
-        intify_offset: bool=False
+        order_xyz: bool = True,
+        ignore_ltm: bool = True,
+        intify_offset: bool = False
 ) -> np.ndarray:
     """ The pixel offset by physical-coordinate information in reference.
 
