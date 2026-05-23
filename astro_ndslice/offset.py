@@ -27,6 +27,11 @@ def regularize_offsets(
     intify_offsets : bool, optional
         Whether to convert the offsets to integers. Default: `False`.
 
+    Returns
+    -------
+    ndarray
+        Regularized offsets in pythonic (zyx) order, all non-negative and
+        relative to the minimum offset in each dimension.
     """
     _offsets = np.atleast_2d(offsets)
     if offset_order_xyz:
@@ -149,7 +154,7 @@ def offsets2slice(
           * ``'inner'``: To process only where all the images have certain
             pixel (fully-overlap).
 
-    shape_order_xyz, offset_order_xyz : bool, optional.
+    shape_order_xyz, offset_order_xyz : bool, optional
         Whether the order of the shapes or offsets are in xyz or pythonic.
         Shapes are usually in pythonic as it is obtained by
         ``image_data.shape``, but offsets are often in xyz order (e.g., if
@@ -158,8 +163,8 @@ def offsets2slice(
         default ``order_xyz=True``). Default is `False` and `True`,
         respectively.
 
-    outer_for_stack : bool, optional.
-        If `True`(default), the output slice is the slice in the ``N+1``-D
+    outer_for_stack : bool, optional
+        If `True` (default), the output slice is the slice in the ``N+1``-D
         array, which will be constructed before combining them along
         ``axis=0``. That is, ``comb = np.nan*np.ones(_offseted_shape(shapes,
         offsets, method='outer'))`` and ``comb[slices[i]] = images[i]``. Then a
@@ -167,10 +172,10 @@ def offsets2slice(
         If ``outer_for_stack=False``, ``slices[i]`` will be
         ``slices_with_outer_for_stack_True[i][1:]``.
 
-    fits_convention : bool, optional.
+    fits_convention : bool, optional
         Whether to return the slices in FITS convention (xyz order, 1-indexing,
-        end index included). If `True` (default), returned list contains str;
-        otherwise, slice objects will be contained.
+        end index included). If `True`, the returned list contains strings;
+        otherwise, `slice` objects. Default: `False`.
 
     Returns
     -------
@@ -267,7 +272,7 @@ def calc_offset_wcs(
     reference : WCS
         The reference WCS to calculate the position *from*.
 
-    loc_target, loc_reference : {"center", "origin"} or ndarray, optional.
+    loc_target, loc_reference : {"center", "origin"} or ndarray, optional
         The location to calculate the position (in pixels and in xyz order)::
 
          * ``'center'``: The center of the image (half of ``NAXISi`` keys).
@@ -277,12 +282,18 @@ def calc_offset_wcs(
 
         Default is ``'center'`` (half of ``NAXISi`` keys in `target`).
 
-    order_xyz : bool, optional.
+    order_xyz : bool, optional
         Whether to return the position in xyz order or not (python order:
-        ``[::-1]`` of the former). Default is `True`.
+        ``[::-1]`` of the former). Default: `True`.
 
-    intify_offset : bool, optional.
-        Whether to convert the offset to integer or not. Default is `False`.
+    intify_offset : bool, optional
+        Whether to convert the offset to integer or not. Default: `False`.
+
+    Returns
+    -------
+    ndarray
+        Pixel offset of `target`'s location in the coordinate of `reference`.
+        In xyz order if `order_xyz` is `True`, else in pythonic (zyx) order.
     """
     from astropy.wcs import WCS
 
@@ -360,19 +371,24 @@ def calc_offset_physical(
         `target`.
         Default is `None`.
 
-    order_xyz : bool, optional.
+    order_xyz : bool, optional
         Whether to return the position in xyz order or not (python order:
-        ``[::-1]`` of the former).
-        Default is `True`.
+        ``[::-1]`` of the former). Default: `True`.
 
-    ignore_ltm : bool, optional.
+    ignore_ltm : bool, optional
         Whether to skip checking the LTM matrix (whether it is diagonal).
         Generally, non-diagonal LTM is rare, so you can save computation time
         by setting `ignore_ltm=True`. If `ignore_ltm=False` and LTM is not
         diagonal, a `NotImplementedError` will be raised.
 
-    intify_offset : bool, optional.
-        Whether to convert the offset to integer or not. Default is `False`.
+    intify_offset : bool, optional
+        Whether to convert the offset to integer or not. Default: `False`.
+
+    Returns
+    -------
+    ndarray
+        Pixel offset derived from LTV keywords. In xyz order if `order_xyz`
+        is `True`, else in pythonic (zyx) order.
 
     Notes
     -----

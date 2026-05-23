@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from astro_ndslice import bezel2slice, slice_from_string, slicefy
-from astro_ndslice.slices import _defitsify_slice
+from astro_ndslice import bezel2slice, slice_from_string, slice_to_string, slicefy
+from astro_ndslice.slices import _defitsify_slice, _fitsify_slice
 
 
 def test_slice_from_string():
@@ -178,6 +178,58 @@ def test_slicefy():
                   [0., 1.]])
     )
 
+    # === fits_convention=False: Python-style indexing
+    assert slicefy('[1:3,0:2]', fits_convention=False) == (
+        slice(1, 3, None), slice(0, 2, None)
+    )
+    assert slicefy('[0:5,:]', fits_convention=False) == (
+        slice(0, 5, None), slice(None, None, None)
+    )
+
     # === error
     with pytest.raises(TypeError):
         slicefy(1.0)
+
+
+def test_fitsify_slice():
+    # round-trip: defitsify then fitsify must be identity
+    fits_inputs = [
+        [slice(1, 10)],
+        [slice(1, 10, 2)],
+        [slice(10, 1)],   # inverted: FITS 10:1
+        [slice(1, 5), slice(2, 8)],
+    ]
+    for s in fits_inputs:
+        assert _fitsify_slice(_defitsify_slice(s)) == s
+
+    # known values
+    # Python slice(0, 10) → FITS slice(1, 10)
+    assert _fitsify_slice([slice(0, 10)]) == [slice(1, 10, None)]
+    # Python inverted slice(9, None, -1) → FITS slice(10, 1)
+    assert _fitsify_slice([slice(9, None, -1)]) == [slice(10, 1, None)]
+
+    with pytest.raises(ValueError):
+        _fitsify_slice([slice(-1, 5)])
+
+
+def test_slice_to_string():
+    arr2d = np.arange(25).reshape(5, 5)
+
+    # round-trip: slice_from_string → slice_to_string
+    for s in ['[1:5,2:4]', '[2:3,:]', '[1:5,1:5]']:
+        py_sl = slice_from_string(s, fits_convention=True)
+        assert slice_to_string(py_sl, fits_convention=True) == s
+
+    # fits_convention=False: output is in Python (zyx) order, 0-indexed
+    assert (
+        slice_to_string((slice(1, 3), slice(0, 4, 2)), fits_convention=False)
+        == '[1:3,0:4:2]'
+    )
+    assert slice_to_string((slice(None), slice(None)), fits_convention=False) == '[:,:]'
+    assert slice_to_string((slice(None),), fits_convention=False) == '[:]'
+
+    # verify the slice actually selects expected data
+    # FITS '[1:3,2:5]': x=1:3 (cols 0-2), y=2:5 (rows 1-4) → Python [1:5, 0:3]
+    py_sl = slice_from_string('[1:3,2:5]', fits_convention=True)
+    assert slice_to_string(py_sl) == '[1:3,2:5]'
+    assert_array_equal(arr2d[py_sl], arr2d[1:5, 0:3])

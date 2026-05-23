@@ -155,12 +155,21 @@ def test_offsets2slice():
         # offsets.ndim != 2
         offsets2slice([(10, 10), (10, 10)], offsets=[[(10, 10), (-20, -20)]])
 
+    # shape_order_xyz=True, offset_order_xyz=False (untested combination)
+    assert (offsets2slice(shapes, offsets, method="outer", shape_order_xyz=True,
+                          offset_order_xyz=False, outer_for_stack=True,
+                          fits_convention=False)
+            == [[slice(0, 1, None), slice(2, 17, None), slice(1, 11, None)],
+                [slice(1, 2, None), slice(0, 10, None), slice(1, 11, None)],
+                [slice(2, 3, None), slice(3, 13, None), slice(0, 10, None)]])
+
     with pytest.raises(ValueError):
         # shape mismatch
         offsets2slice(shapes, offsets[1:])
 
 
 def test_calc_offset_wcs():
+    pytest.importorskip("astropy")
     from astropy.io import fits
     from astropy.wcs import WCS
 
@@ -235,11 +244,30 @@ EQUINOX =               2000.0""", sep="\n"))
         atol=1e-9
     )
 
+    # ndarray loc_target: same position as "center" of w1
+    center_w1 = np.array(w1._naxis) / 2  # [360.5, 360.0] in xyz
+    assert_allclose(
+        calc_offset_wcs(w1, w2, loc_target=center_w1, loc_reference="center",
+                        order_xyz=True, intify_offset=False),
+        np.array([1.9, 0.0]),
+        atol=1e-9
+    )
+    # ndarray loc_reference
+    assert_allclose(
+        calc_offset_wcs(
+            w1, w2, loc_target="center", loc_reference=np.array([350., 350.]),
+            order_xyz=True, intify_offset=False
+        ),
+        np.array([12.4, 10.]),
+        atol=1e-9
+    )
+
     with pytest.raises(TypeError):
         calc_offset_wcs(w1, "asdf")
 
 
 def test_calc_offset_physical():
+    pytest.importorskip("astropy")
     from astropy.io import fits
 
     hdr = fits.Header.fromstring("""

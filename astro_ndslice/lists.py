@@ -24,10 +24,10 @@ def is_list_like(
     ----------
     *objs : object
         Objects to check.
-    allow_sets : bool, optional.
+    allow_sets : bool, optional
         If this parameter is `False`, sets will not be considered list-like.
         Default: `True`
-    func : functional object, optional.
+    func : functional object, optional
         The function to be applied to each element. Useful ones are `all` and
         `any`.
         Default: `all`
@@ -76,11 +76,12 @@ def listify(
         If multiple objects are given, maximum length of them is used as the
         target length.
 
-    scalar2list : bool, optional.
+    scalar2list : bool, optional
         If `True`, a single scalar input will be converted to a list of a
-        target length. Otherwise, it will be returned as is.
+        target length. Otherwise, it will be returned as is. Has no effect
+        on list-like inputs, which are always converted with ``list(obj)``.
 
-    none2list : bool, optional.
+    none2list : bool, optional
         Whether to return an empty list (`[]`). If `True`, ``[None]`` is
         returned if `objs` is `None`.
         Default: `False`
@@ -89,7 +90,7 @@ def listify(
     -----
     If any obj of `None` need to be converted to a length>1 list, it will be
     made as [None, None, ...], rather than an empty list, regardless of
-    `empty_if_none`.
+    `none2list`.
 
     Timing on MBP 14" [2021, macOS 12.2, M1Pro(6P+2E/G16c/N16c/32G)]:
     %timeit yfu.listify([12])
@@ -134,7 +135,7 @@ def ndfy(
         The item to be made into a list. If `None`, it will be filled by
         `default`.
 
-    length : int, optional.
+    length : int, optional
         The length of the final list. If `None`, the length of the input is
         used (if `item` is a scalar, a length-1 list is returned).
 

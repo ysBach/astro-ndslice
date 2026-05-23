@@ -83,3 +83,10 @@ def test_ndfy():
 
     with pytest.raises(ValueError):
         ndfy([0, 1], length=3)  # mismatch
+
+
+def test_listify_scalar2list_no_effect_on_lists():
+    # scalar2list only affects scalars; list-like inputs always go through list(obj)
+    assert listify([1, 2], scalar2list=False) == [1, 2]
+    assert listify([1, 2], scalar2list=True) == [1, 2]
+    assert listify((1, 2), scalar2list=False) == [1, 2]

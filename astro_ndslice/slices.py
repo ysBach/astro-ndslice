@@ -1,9 +1,7 @@
-import numpy as np
-
 from .lists import is_list_like, listify, ndfy
 
 __all__ = [
-    "slice_from_string", "slicefy", "bezel2slice",
+    "slice_from_string", "slice_to_string", "slicefy", "bezel2slice",
 ]
 
 
@@ -11,9 +9,10 @@ __all__ = [
 def slicefy(
     rule: str | int | list[int] | list[slice] | None = None,
     ndim: int = 2,
-    order_xyz: bool = True
+    order_xyz: bool = True,
+    fits_convention: bool = True
 ) -> tuple:
-    """ Parse the rule by trimsec, bezels, or slices (in this priority).
+    """Parse the rule by trimsec, bezels, or slices (in this priority).
 
     Parameters
     ----------
@@ -30,36 +29,47 @@ def slicefy(
         If a single int/slice is given, it will be applied to all the axes.
 
     ndim : int, optional
-        The number of dimensions of the image to convert `rule` into slice.
-        (i.e., the length of the final output)
+        The number of dimensions of the image to convert `rule` into slices
+        (i.e., the length of the final output).
 
     order_xyz : bool, optional
-        Whether the order of rule is in xyz order. Works only if the `rule` is
+        Whether the order of rule is in xyz order. Works only if `rule` is
         bezel-like (int or list of int). If it is slice-like, `rule` must be in
         the pythonic order (i.e., ``[slice_for_axis0, slice_for_axis1, ...]``).
 
+    fits_convention : bool, optional
+        Whether `rule` (if str) follows the FITS convention: 1-indexed with
+        the first axis varying fastest. Ignored for non-string `rule`.
+        Default: `True`.
+
+    Returns
+    -------
+    tuple of slice
+        A tuple of `slice` objects that can be used to index a numpy array.
+
+    Examples
+    --------
+    >>> import numpy as np
     >>> np.eye(5)[slicefy('[1:2,:]')]
-    # array([[1., 0.],
-    #       [0., 1.],
-    #       [0., 0.],
-    #       [0., 0.],
-    #       [0., 0.]])
-    >>> np.eye(5)[slicefy(1)]  # bezel by 1 pix
-    # array([[1., 0., 0.],
-    #    [0., 1., 0.],
-    #    [0., 0., 1.]])
-    >>> np.eye(5)[slicefy((1, 2))]  # bezel by (1, 1), (2, 2) pix (x/y dir)
-    # array([[0., 1., 0.]])
-    >>> np.eye(5)[slicefy(slice(1, -1, 2))]  # data[1:-1:2, 1:-1:2]
-    # array([[1., 0.],
-    #    [0., 1.]])
+    array([[1., 0.],
+           [0., 1.],
+           [0., 0.],
+           [0., 0.],
+           [0., 0.]])
+    >>> np.eye(5)[slicefy(1)]
+    array([[1., 0., 0.],
+           [0., 1., 0.],
+           [0., 0., 1.]])
+    >>> np.eye(5)[slicefy((1, 2))]
+    array([[0., 1., 0.]])
+    >>> np.eye(5)[slicefy(slice(1, -1, 2))]
+    array([[1., 0.],
+           [0., 1.]])
     """
     if rule is None:
         return tuple([slice(None, None, None) for _ in range(ndim)])
     elif isinstance(rule, str):
-        fs = np.atleast_1d(rule)
-        sl = [slice_from_string(sect, fits_convention=True) for sect in fs]
-        return sl[0] if len(sl) == 1 else tuple(sl)
+        return slice_from_string(rule, fits_convention=fits_convention)
     elif is_list_like(rule):
         if isinstance(rule[0], slice):  # list of slice
             return tuple(ndfy(rule, ndim))
@@ -162,20 +172,21 @@ def slice_from_string(
 
 # Directly imported from ccdproc.utils.slices
 def _defitsify_slice(slices: list) -> list:
-    """
-    Convert a FITS-style slice specification into a python slice.
-    This means two things:
-    + Subtract 1 from starting index because in the FITS
-      specification arrays are one-based.
-    + Do **not** subtract 1 from the ending index because the python
-      convention for a slice is for the last value to be one less than the
-      stop value. In other words, this subtraction is already built into
-      python.
-    + Reverse the order of the slices, because the FITS specification dictates
-      that the first axis is the one along which the index varies most rapidly
-      (aka FORTRAN order).
+    """Convert a FITS-style slice specification into a python slice.
 
-    Directly imported from ccdproc.utils.slices
+    Subtracts 1 from starting index (FITS is 1-based) and reverses slice
+    order (FITS first axis varies fastest, i.e., FORTRAN order).
+    Directly imported from ccdproc.utils.slices.
+
+    Parameters
+    ----------
+    slices : list of slice
+        FITS-style slice objects to convert.
+
+    Returns
+    -------
+    list of slice
+        Python-style slice objects.
     """
 
     python_slice = []
@@ -198,28 +209,109 @@ def _defitsify_slice(slices: list) -> list:
     return python_slice
 
 
+def _fitsify_slice(slices: list) -> list:
+    """Convert python slices to FITS-style slice specification.
+
+    The inverse of ``_defitsify_slice``: adds 1 to starting index and
+    reverses slice order (Python zyx → FITS xyz order).
+
+    Parameters
+    ----------
+    slices : list of slice
+        Python-style slice objects to convert.
+
+    Returns
+    -------
+    list of slice
+        FITS-style slice objects.
+    """
+    fits_slice = []
+    for a_slice in slices[::-1]:  # reverse to FITS order (zyx → xyz)
+        if a_slice.step is not None and a_slice.step < 0:
+            # inverted: came from a FITS slice where start > stop
+            new_start = a_slice.start + 1 if a_slice.start is not None else None
+            new_stop = 1 if a_slice.stop is None else a_slice.stop + 2
+            new_step = -a_slice.step if a_slice.step != -1 else None
+        else:
+            new_start = a_slice.start + 1 if a_slice.start is not None else None
+            new_stop = a_slice.stop
+            new_step = a_slice.step
+        if new_start is not None and new_start <= 0:
+            raise ValueError(
+                f"FITS index must be >= 1; Python start={a_slice.start} maps to 0."
+            )
+        fits_slice.append(slice(new_start, new_stop, new_step))
+    return fits_slice
+
+
+def slice_to_string(
+    slices: tuple | list,
+    fits_convention: bool = True
+) -> str:
+    """Convert a tuple of slices to a string representation.
+
+    The inverse of ``slice_from_string``.
+
+    Parameters
+    ----------
+    slices : tuple or list of slice
+        `slice` objects to convert. Must be in pythonic (zyx) order when
+        `fits_convention` is `True`.
+
+    fits_convention : bool, optional
+        If `True`, convert to FITS convention: 1-indexed, first axis varies
+        fastest (xyz order in output string), end index included.
+        Default: `True`.
+
+    Returns
+    -------
+    str
+        String representation enclosed in square brackets.
+
+    Examples
+    --------
+    >>> slice_to_string((slice(0, 5), slice(1, 3)))
+    '[2:3,1:5]'
+    >>> slice_to_string((slice(1, 3), slice(0, 4, 2)), fits_convention=False)
+    '[1:3,0:4:2]'
+    """
+    _slices = _fitsify_slice(list(slices)) if fits_convention else list(slices)
+    parts = []
+    for s in _slices:
+        start = '' if s.start is None else str(s.start)
+        stop = '' if s.stop is None else str(s.stop)
+        step = '' if s.step is None else str(s.step)
+        parts.append(f'{start}:{stop}' if not step else f'{start}:{stop}:{step}')
+    return '[' + ','.join(parts) + ']'
+
+
 def bezel2slice(
     rule: int | list[int] | None = None,
-    ndim:int = 2,
+    ndim: int = 2,
     order_xyz: bool = True
-) -> tuple[slice]:
-    """ Convert non-slice rule to slice objects
+) -> tuple[slice, ...]:
+    """Convert non-slice rule to slice objects.
 
     Parameters
     ----------
     rule : int, list of int, None, optional
         The number of pixels to trim from the edge of the image (bezel).
-        Example is ``[1, 2]``. If a single int is given, it will be applied to
-        all the axes.
+        Example is ``[1, 2]``. If a single int is given, it will be applied
+        to all the axes.
 
-    ndim : int, optional.
-        The number of dimensions of the image to convert `bezels` into slice.
+    ndim : int, optional
+        The number of dimensions of the image to convert `bezels` into slices.
 
-    order_xyz : bool, optional.
-        Whether `bezel` in xyz order or not (python order:
+    order_xyz : bool, optional
+        Whether `bezel` is in xyz order or not (python order:
         ``xyz_order[::-1]``). Due to its confusing behavior, it is intended to
         be `True` most of the time.
         Default: `True`.
+
+    Returns
+    -------
+    tuple of slice
+        A tuple of `slice` objects for indexing a numpy array.
 
     Notes
     -----
