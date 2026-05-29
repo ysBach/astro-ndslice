@@ -1,7 +1,12 @@
+from numbers import Integral
+
 from .lists import is_list_like, listify, ndfy
 
 __all__ = [
-    "slice_from_string", "slice_to_string", "slicefy", "bezel2slice",
+    "slice_from_string",
+    "slice_to_string",
+    "slicefy",
+    "bezel2slice",
 ]
 
 
@@ -10,7 +15,7 @@ def slicefy(
     rule: str | int | list[int] | list[slice] | None = None,
     ndim: int = 2,
     order_xyz: bool = True,
-    fits_convention: bool = True
+    fits_convention: bool = True,
 ) -> tuple:
     """Parse the rule by trimsec, bezels, or slices (in this priority).
 
@@ -67,27 +72,29 @@ def slicefy(
            [0., 1.]])
     """
     if rule is None:
-        return tuple([slice(None, None, None) for _ in range(ndim)])
+        return (slice(None, None, None),) * ndim
     elif isinstance(rule, str):
         return slice_from_string(rule, fits_convention=fits_convention)
+    elif isinstance(rule, slice):
+        return (rule,) * ndim
+    elif isinstance(rule, Integral):  # bezel-like
+        return bezel2slice(rule, ndim=ndim, order_xyz=order_xyz)
     elif is_list_like(rule):
         if isinstance(rule[0], slice):  # list of slice
+            if len(rule) == ndim:
+                return tuple(rule)
+            if len(rule) == 1:
+                return tuple(rule) * ndim
             return tuple(ndfy(rule, ndim))
-        else:  # list of bezel-like
-            return bezel2slice(rule, order_xyz=order_xyz)
-    elif isinstance(rule, int):  # bezel-like
-        return bezel2slice(rule, order_xyz=order_xyz)
-    elif isinstance(rule, slice):
-        return tuple(ndfy(rule, ndim))
+        return bezel2slice(rule, ndim=ndim, order_xyz=order_xyz)
     else:
-        raise TypeError(f"`rule` must be a str or a list of int/slice. Now {type(rule)=}")
+        raise TypeError(
+            f"`rule` must be a str or a list of int/slice. Now {type(rule)=}"
+        )
 
 
 # Directly imported from ccdproc.utils.slices
-def slice_from_string(
-    string: str,
-    fits_convention: bool = False
-) -> tuple:
+def slice_from_string(string: str, fits_convention: bool = False) -> tuple:
     """Convert a string to a tuple of slices.
 
     Parameters
@@ -139,28 +146,27 @@ def slice_from_string(
     array([[0, 1, 2],
            [5, 6, 7]])
     """
-    no_space = string.replace(' ', '')
+    no_space = string.replace(" ", "")
 
     if not no_space:
         return ()
 
-    if not (no_space.startswith('[') and no_space.endswith(']')):
-        raise ValueError('Slice string must be enclosed in square brackets.')
+    if not (no_space.startswith("[") and no_space.endswith("]")):
+        raise ValueError("Slice string must be enclosed in square brackets.")
 
-    no_space = no_space.strip('[]')
+    no_space = no_space.strip("[]")
     if fits_convention:
         # Special cases first
         # Flip dimension, with step
-        no_space = no_space.replace('-*:', '::-')
+        no_space = no_space.replace("-*:", "::-")
         # Flip dimension
-        no_space = no_space.replace('-*', '::-1')
+        no_space = no_space.replace("-*", "::-1")
         # Normal wildcard
-        no_space = no_space.replace('*', ':')
-    string_slices = no_space.split(',')
+        no_space = no_space.replace("*", ":")
+    string_slices = no_space.split(",")
     slices = []
     for string_slice in string_slices:
-        slice_args = [int(arg) if arg else None
-                      for arg in string_slice.split(':')]
+        slice_args = [int(arg) if arg else None for arg in string_slice.split(":")]
         a_slice = slice(*slice_args)
         slices.append(a_slice)
 
@@ -197,12 +203,15 @@ def _defitsify_slice(slices: list) -> list:
         if a_slice.stop is not None and a_slice.stop < 0:
             raise ValueError("Negative final index not allowed for FITS slice")
         new_slice = slice(new_start, a_slice.stop, a_slice.step)
-        if (a_slice.start is not None and a_slice.stop is not None and
-                a_slice.start > a_slice.stop):
+        if (
+            a_slice.start is not None
+            and a_slice.stop is not None
+            and a_slice.start > a_slice.stop
+        ):
             # FITS use a positive step index when dimension are inverted
             new_step = -1 if a_slice.step is None else -a_slice.step
             # Special case to prevent -1 as slice stop value
-            new_stop = None if a_slice.stop == 1 else a_slice.stop-2
+            new_stop = None if a_slice.stop == 1 else a_slice.stop - 2
             new_slice = slice(new_start, new_stop, new_step)
         python_slice.append(new_slice)
 
@@ -244,10 +253,7 @@ def _fitsify_slice(slices: list) -> list:
     return fits_slice
 
 
-def slice_to_string(
-    slices: tuple | list,
-    fits_convention: bool = True
-) -> str:
+def slice_to_string(slices: tuple | list, fits_convention: bool = True) -> str:
     """Convert a tuple of slices to a string representation.
 
     The inverse of ``slice_from_string``.
@@ -278,17 +284,15 @@ def slice_to_string(
     _slices = _fitsify_slice(list(slices)) if fits_convention else list(slices)
     parts = []
     for s in _slices:
-        start = '' if s.start is None else str(s.start)
-        stop = '' if s.stop is None else str(s.stop)
-        step = '' if s.step is None else str(s.step)
-        parts.append(f'{start}:{stop}' if not step else f'{start}:{stop}:{step}')
-    return '[' + ','.join(parts) + ']'
+        start = "" if s.start is None else str(s.start)
+        stop = "" if s.stop is None else str(s.stop)
+        step = "" if s.step is None else str(s.step)
+        parts.append(f"{start}:{stop}" if not step else f"{start}:{stop}:{step}")
+    return "[" + ",".join(parts) + "]"
 
 
 def bezel2slice(
-    rule: int | list[int] | None = None,
-    ndim: int = 2,
-    order_xyz: bool = True
+    rule: int | list[int] | None = None, ndim: int = 2, order_xyz: bool = True
 ) -> tuple[slice, ...]:
     """Convert non-slice rule to slice objects.
 
@@ -326,8 +330,35 @@ def bezel2slice(
     This confusing behavior is due to the (stupid and/or inconsistent?) way
     our world represents xy-coordinates.
     """
-    bezels = ndfy([ndfy(b, length=2, default=0) for b in listify(rule)], ndim)
-    #                      ^^^^^^^^
-    # length should be 2 (one for upper & one for lower)
+
+    def _pair_from_bezel(bezel):
+        if bezel is None:
+            return [0, 0]
+        if isinstance(bezel, Integral):
+            return [bezel, bezel]
+        values = list(bezel) if is_list_like(bezel) else [bezel]
+        values = [0 if value is None else value for value in values]
+        if len(values) == 2:
+            return values
+        if len(values) == 1:
+            return values * 2
+        raise ValueError(
+            f"`len(item)` must be 1 or `length`(=2). Now it is {len(values)}."
+        )
+
+    if rule is None:
+        # Preserve the existing ndfy/listify error for the undocumented None case.
+        bezels = ndfy([], ndim)
+    elif isinstance(rule, Integral):
+        bezels = [[rule, rule]] * ndim
+    else:
+        bezels = [_pair_from_bezel(bezel) for bezel in listify(rule)]
+        if len(bezels) == 1:
+            bezels *= ndim
+        elif len(bezels) != ndim:
+            raise ValueError(
+                f"`len(item)` must be 1 or `length`(={ndim}). Now it is {len(bezels)}."
+            )
+
     bezels = bezels[::-1] if order_xyz else bezels
-    return tuple([slice(b[0], None if b[1] == 0 else -b[1]) for b in bezels])
+    return tuple(slice(b[0], None if b[1] == 0 else -b[1]) for b in bezels)

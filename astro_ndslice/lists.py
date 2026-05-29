@@ -1,8 +1,10 @@
 """
 Simple tools to make lists
 """
+
 from collections import abc
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -13,12 +15,8 @@ __all__ = [
 ]
 
 
-def is_list_like(
-    *objs,
-    allow_sets: bool = True,
-    func: Callable = all
-) -> bool:
-    """ Check if inputs are list-like
+def is_list_like(*objs, allow_sets: bool = True, func: Callable = all) -> bool:
+    """Check if inputs are list-like
 
     Parameters
     ----------
@@ -40,30 +38,38 @@ def is_list_like(
 
     Note that pd.DataFrame also returns True.
 
-    Timing on MBP 14" [2021, macOS 12.2, M1Pro(6P+2E/G16c/N16c/32G)]
+    Timing on MBP 14" [2024, macOS 26.5, M4Pro(8P+4E/G20c/N16c/48G)]
     %timeit yfu.is_list_like("asdfaer.fits")
-    4.32 µs +- 572 ns per loop (mean +- std. dev. of 7 runs, 100000 loops each)
+    0.182 µs +- 0.005 µs per loop
+    (mean +- std. dev. of 7 runs, 100000 loops each)
     """
-    # I don't think we need speed boost here but...
-    # if `func` is `any`, below can be reorganized by for loop and can return
-    # `True` once it reaches `True` for the first time.
-    return func(
-        isinstance(obj, abc.Iterable)
-        # we do not count strings/unicode/bytes as list-like
-        and not isinstance(obj, (str, bytes))
-        # exclude zero-dimensional numpy arrays, effectively scalars
-        and not (isinstance(obj, np.ndarray) and obj.ndim == 0)
-        # exclude sets if allow_sets is False
-        and not (allow_sets is False and isinstance(obj, abc.Set))
-        for obj in objs
-    )
+
+    def _is_list_like(obj):
+        return (
+            isinstance(obj, abc.Iterable)
+            # we do not count strings/unicode/bytes as list-like
+            and not isinstance(obj, (str, bytes))
+            # exclude zero-dimensional numpy arrays, effectively scalars
+            and not (isinstance(obj, np.ndarray) and obj.ndim == 0)
+            # exclude sets if allow_sets is False
+            and not (allow_sets is False and isinstance(obj, abc.Set))
+        )
+
+    if func is all:
+        for obj in objs:
+            if not _is_list_like(obj):
+                return False
+        return True
+    if func is any:
+        for obj in objs:
+            if _is_list_like(obj):
+                return True
+        return False
+
+    return func(_is_list_like(obj) for obj in objs)
 
 
-def listify(
-    *objs,
-    scalar2list: bool = True,
-    none2list: bool = False
-) -> list:
+def listify(*objs, scalar2list: bool = True, none2list: bool = False) -> list:
     """Make multiple objects into list of same length.
 
     Parameters
@@ -92,15 +98,19 @@ def listify(
     made as [None, None, ...], rather than an empty list, regardless of
     `none2list`.
 
-    Timing on MBP 14" [2021, macOS 12.2, M1Pro(6P+2E/G16c/N16c/32G)]:
+    Timing on MBP 14" [2024, macOS 26.5, M4Pro(8P+4E/G20c/N16c/48G)]:
     %timeit yfu.listify([12])
-    8.92 µs +- 434 ns per loop (mean +- std. dev. of 7 runs, 100000 loops each)
+    0.355 µs +- 0.006 µs per loop
+    (mean +- std. dev. of 7 runs, 100000 loops each)
     %timeit yfu.listify("asdf")
-    7.08 µs +- 407 ns per loop (mean +- std. dev. of 7 runs, 100000 loops each)
+    0.287 µs +- 0.005 µs per loop
+    (mean +- std. dev. of 7 runs, 100000 loops each)
     %timeit yfu.listify("asdf", scalar2list=False)
-    7.37 µs +- 586 ns per loop (mean +- std. dev. of 7 runs, 100000 loops each)
+    0.273 µs +- 0.002 µs per loop
+    (mean +- std. dev. of 7 runs, 100000 loops each)
 
     """
+
     def _listify_single(obj, none2list=True):
         if obj is None:
             return [obj] if none2list else []
@@ -110,7 +120,12 @@ def listify(
             return [obj] if scalar2list else obj
 
     if len(objs) == 1:
-        return _listify_single(objs[0], none2list=none2list)
+        obj = objs[0]
+        if obj is None:
+            return [None] if none2list else []
+        if is_list_like(obj):
+            return list(obj)
+        return [obj] if scalar2list else obj
 
     objlists = [_listify_single(obj, none2list=True) for obj in objs]
     lengths = [len(obj) for obj in objlists]
@@ -119,15 +134,11 @@ def listify(
         if len(objl) not in [1, length]:
             raise ValueError(f"Each input must be 1 or max(lengths)={length}.")
 
-    return [obj*length if len(obj) == 1 else obj for obj in objlists]
+    return [obj * length if len(obj) == 1 else obj for obj in objlists]
 
 
-def ndfy(
-    item,
-    length: int | None = None,
-    default: Any = None
-) -> list:
-    """ Make an item to a list of `length`.
+def ndfy(item, length: int | None = None, default: Any = None) -> list:
+    """Make an item to a list of `length`.
 
     Parameters
     ----------
@@ -156,7 +167,8 @@ def ndfy(
 
     It is also useful for `slicefy`.
 
-    Note that some cases can be ambiguous: ``ndfy([[1, 2, 3]], length=3)`` may mean either::
+    Note that some cases can be ambiguous:
+    ``ndfy([[1, 2, 3]], length=3)`` may mean either::
 
       1. ``((1, 2, 3), (1, 2, 3), (1, 2, 3))``
       2. ``((1, 1, 1), (2, 2, 2), (3, 3, 3))``
