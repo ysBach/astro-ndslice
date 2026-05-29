@@ -1,17 +1,18 @@
 import numpy as np
 
 __all__ = [
-    "regularize_offsets", "offseted_shape", "offsets2slice",
-    "calc_offset_wcs", "calc_offset_physical",
+    "regularize_offsets",
+    "offseted_shape",
+    "offsets2slice",
+    "calc_offset_wcs",
+    "calc_offset_physical",
 ]
 
 
 def regularize_offsets(
-    offsets: np.ndarray,
-    offset_order_xyz: bool = True,
-    intify_offsets: bool = False
+    offsets: np.ndarray, offset_order_xyz: bool = True, intify_offsets: bool = False
 ) -> np.ndarray:
-    """ Makes offsets all non-negative and relative to each other.
+    """Makes offsets all non-negative and relative to each other.
 
     Parameters
     ----------
@@ -35,13 +36,13 @@ def regularize_offsets(
     """
     _offsets = np.atleast_2d(offsets)
     if offset_order_xyz:
-        _offsets = np.flip(_offsets, -1)
+        _offsets = _offsets[..., ::-1]
 
     # _offsets = np.max(_offsets, axis=0) - _offsets
     _offsets = _offsets - np.min(_offsets, axis=0)
     # This is the convention to follow IRAF (i.e., all of offsets > 0.)
     if intify_offsets:
-        _offsets = np.around(_offsets).astype(int)
+        _offsets = np.rint(_offsets).astype(int)
 
     return _offsets
 
@@ -49,10 +50,10 @@ def regularize_offsets(
 def offseted_shape(
     shapes: np.ndarray,
     offsets: np.ndarray,
-    method: str = 'outer',
+    method: str = "outer",
     offset_order_xyz: bool = True,
     intify_offsets: bool = False,
-    pythonize_offsets: bool = True
+    pythonize_offsets: bool = True,
 ) -> tuple[np.ndarray, tuple[int, ...]]:
     """shapes and offsets must be in the order of python/numpy (i.e., z, y, x order).
 
@@ -97,34 +98,34 @@ def offseted_shape(
     """
 
     _offsets = regularize_offsets(
-        offsets,
-        offset_order_xyz=offset_order_xyz,
-        intify_offsets=intify_offsets
+        offsets, offset_order_xyz=offset_order_xyz, intify_offsets=intify_offsets
     )
 
-    if method == 'outer':
-        shape_out = np.around(np.max(np.array(shapes) + _offsets, axis=0)).astype(int)
+    if method == "outer":
+        shape_out = np.rint(np.max(np.asarray(shapes) + _offsets, axis=0)).astype(int)
         # print(_offsets, shapes, shape_out)
     # elif method == 'stack':
     #     shape_out_comb = np.around(
     #         np.max(np.array(shapes) + _offsets, axis=0)
     #     ).astype(int)
     #     shape_out = (len(shapes), *shape_out_comb)
-    elif method == 'inner':
+    elif method == "inner":
         lower_bound = np.max(_offsets, axis=0)
         upper_bound = np.min(_offsets + shapes, axis=0)
         npix = upper_bound - lower_bound
         shape_out = np.around(npix).astype(int)
         if np.any(npix < 0):
-            raise ValueError("There doesn't exist fully-overlapping pixel! "
-                             + f"Naïve output shape={shape_out}.")
+            raise ValueError(
+                "There doesn't exist fully-overlapping pixel! "
+                + f"Naïve output shape={shape_out}."
+            )
         # print(lower_bound, upper_bound, shape_out)
     else:
         raise ValueError("method unacceptable (use one of 'inner', 'outer').")
 
     if offset_order_xyz and not pythonize_offsets:
         # reverse _offsets to original xyz order
-        _offsets = np.flip(_offsets, -1)
+        _offsets = _offsets[..., ::-1]
 
     return _offsets, tuple(shape_out)
 
@@ -132,13 +133,13 @@ def offseted_shape(
 def offsets2slice(
     shapes: np.ndarray,
     offsets: np.ndarray,
-    method: str = 'outer',
+    method: str = "outer",
     shape_order_xyz: bool = False,
     offset_order_xyz: bool = True,
     outer_for_stack: bool = True,
-    fits_convention: bool = False
+    fits_convention: bool = False,
 ) -> list:
-    """ Calculates the slices for each image to extract overlapping parts.
+    """Calculates the slices for each image to extract overlapping parts.
 
     Parameters
     ----------
@@ -193,12 +194,10 @@ def offsets2slice(
     """
     _shapes = np.atleast_2d(shapes)
     if shape_order_xyz:
-        _shapes = np.flip(_shapes, -1)
+        _shapes = _shapes[..., ::-1]
 
     _offsets = regularize_offsets(
-        offsets,
-        offset_order_xyz=offset_order_xyz,
-        intify_offsets=True
+        offsets, offset_order_xyz=offset_order_xyz, intify_offsets=True
     )
 
     if _shapes.ndim != 2 or _offsets.ndim != 2:
@@ -207,62 +206,55 @@ def offsets2slice(
     if _shapes.shape != _offsets.shape:
         raise ValueError("shapes and offsets must have the identical shape.")
 
-    def _empty_tmp(_i):
-        return []
-
-    if method == 'outer':
+    if method == "outer":
         starts = _offsets
         stops = _offsets + _shapes
-        if outer_for_stack:
-            def _initial_tmp(i):
-                return [f"{i + 1}:{i + 1}"] if fits_convention else [slice(i, i + 1, None)]
-        else:
-            _initial_tmp = _empty_tmp
-    elif method == 'inner':
+        include_stack_axis = outer_for_stack
+    elif method == "inner":
         offmax = np.max(_offsets, axis=0)
         if np.any(np.min(_shapes + _offsets, axis=0) <= offmax):
             raise ValueError(
                 "At least 1 frame has no overlapping pixel with all others. "
-                + "Check if there's any overlapping pixel for images for the given offsets."
+                + "Check if there's any overlapping pixel for images for the "
+                + "given offsets."
             )
 
         # 1-D array +/- 2-D array:
         #   the former 1-D array is broadcast s.t. it is "tile"d along axis=-1.
         starts = offmax - _offsets
         stops = np.min(_offsets + _shapes, axis=0) - _offsets
-        _initial_tmp = _empty_tmp
+        include_stack_axis = False
     else:
         raise ValueError("method unacceptable (use one of 'inner', 'outer').")
 
     slices = []
     for image_i, (start, stop) in enumerate(zip(starts, stops)):
         # NOTE: starts/stops are all in pythonic index
-        tmp = _initial_tmp(image_i)
-        # print(tmp)
-        for start_i, stop_i in zip(start, stop):  # i = coordinate, (z y x) order
-            if fits_convention:
-                tmp.append(f"{start_i + 1:d}:{stop_i:d}")
-            else:
-                tmp.append(slice(start_i, stop_i, None))
-            # print(tmp)
-
         if fits_convention:
-            slices.append('[' + ','.join(tmp[::-1]) + ']')  # order is opposite!
+            tmp = [
+                f"{start_i + 1:d}:{stop_i:d}" for start_i, stop_i in zip(start, stop)
+            ]
+            if include_stack_axis:
+                tmp.insert(0, f"{image_i + 1}:{image_i + 1}")
+            slices.append("[" + ",".join(tmp[::-1]) + "]")  # order is opposite!
         else:
+            tmp = [slice(start_i, stop_i, None) for start_i, stop_i in zip(start, stop)]
+            if include_stack_axis:
+                tmp.insert(0, slice(image_i, image_i + 1, None))
             slices.append(tmp)
 
     return slices
 
 
 def calc_offset_wcs(
-        target,
-        reference,
-        loc_target: str = "center",
-        loc_reference: str = "center",
-        order_xyz: bool = True,
-        intify_offset: bool = False
+    target,
+    reference,
+    loc_target: str = "center",
+    loc_reference: str = "center",
+    order_xyz: bool = True,
+    intify_offset: bool = False,
 ) -> np.ndarray:
-    """ The pixel offset of target's location when using WCS in reference.
+    """The pixel offset of target's location when using WCS in reference.
 
     Parameters
     ----------
@@ -304,9 +296,9 @@ def calc_offset_wcs(
             raise TypeError("input must be an instance of astropy.wcs.WCS.")
 
         if loc == "center":
-            _loc = np.atleast_1d(w._naxis)/2
+            _loc = np.atleast_1d(w._naxis) / 2
         elif loc == "origin":
-            _loc = np.array([0.]*w.naxis)
+            _loc = np.array([0.0] * w.naxis)
         else:
             _loc = np.atleast_1d(loc)
 
@@ -335,30 +327,30 @@ def _check_ltm(hdr):
         for j in range(ndim):
             try:
                 if i == j:
-                    assert float(hdr[f"LTM{i+1}_{j+1}"]) != 0.
+                    assert float(hdr[f"LTM{i + 1}_{j + 1}"]) != 0.0
                 else:
-                    assert float(hdr[f"LTM{i+1}_{j+1}"]) == 0.
+                    assert float(hdr[f"LTM{i + 1}_{j + 1}"]) == 0.0
             except (KeyError, IndexError):
                 continue
-            except (AssertionError):
+            except AssertionError:
                 raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
 
         try:  # Sometimes LTM matrix is saved as ``LTMi``, not ``LTMi_j``.
-            assert float(hdr[f"LTM{i+1}"]) == 1.0
+            assert float(hdr[f"LTM{i + 1}"]) == 1.0
         except (KeyError, IndexError):
             continue
-        except (AssertionError):
+        except AssertionError:
             raise NotImplementedError("Non-diagonal LTM matrix is not supported.")
 
 
 def calc_offset_physical(
-        target,
-        reference=None,
-        order_xyz: bool = True,
-        ignore_ltm: bool = True,
-        intify_offset: bool = False
+    target,
+    reference=None,
+    order_xyz: bool = True,
+    ignore_ltm: bool = True,
+    intify_offset: bool = False,
 ) -> np.ndarray:
-    """ The pixel offset by physical-coordinate information in reference.
+    """The pixel offset by physical-coordinate information in reference.
 
     Parameters
     ----------
