@@ -26,7 +26,7 @@ def test_is_list_like_list_tuple_dict():
 
     assert is_list_like([1, (1, 2)])
     assert is_list_like({})
-    assert is_list_like({1: 2}, (1, ))
+    assert is_list_like({1: 2}, (1,))
 
 
 def test_is_list_like_set():
@@ -56,8 +56,8 @@ def test_listify():
     # Below are the most important cases `listify` is useful
     assert listify("ab") == ["ab"]
     assert listify("ab", scalar2list=False) == "ab"
-    assert listify([1, 2], "a") == [[1, 2], ['a', 'a']]
-    assert listify([1, 2], "a", None) == [[1, 2], ['a', 'a'], [None, None]]
+    assert listify([1, 2], "a") == [[1, 2], ["a", "a"]]
+    assert listify([1, 2], "a", None) == [[1, 2], ["a", "a"], [None, None]]
 
 
 def test_ndfy():
@@ -79,14 +79,29 @@ def test_ndfy():
     assert ndfy(bezel3_nd, length=arr.ndim) == ans
 
     bezel = [[1, 2]]
-    assert (ndfy(bezel, arr.ndim) == [[1, 2], [1, 2]])
+    assert ndfy(bezel, arr.ndim) == [[1, 2], [1, 2]]
 
     with pytest.raises(ValueError):
         ndfy([0, 1], length=3)  # mismatch
 
 
 def test_listify_scalar2list_no_effect_on_lists():
-    # scalar2list only affects scalars; list-like inputs always go through list(obj)
+    # scalar2list only affects a single scalar input; list-like inputs always
+    # go through list(obj).
     assert listify([1, 2], scalar2list=False) == [1, 2]
     assert listify([1, 2], scalar2list=True) == [1, 2]
     assert listify((1, 2), scalar2list=False) == [1, 2]
+
+
+def test_listify_single_scalar_and_multi_input_normalization():
+    assert listify(3, scalar2list=False) == 3
+    assert listify("one", scalar2list=False) == "one"
+
+    values = (value for value in ("a", "b"))
+    assert listify("x", None, 3, values, [1, 2], scalar2list=False) == [
+        ["x", "x"],
+        [None, None],
+        [3, 3],
+        ["a", "b"],
+        [1, 2],
+    ]

@@ -1,6 +1,4 @@
-"""
-Simple tools to make lists
-"""
+"""Normalize scalars and iterables to lists."""
 
 from collections import abc
 from collections.abc import Callable
@@ -16,32 +14,35 @@ __all__ = [
 
 
 def is_list_like(*objs, allow_sets: bool = True, func: Callable = all) -> bool:
-    """Check if inputs are list-like
+    """Check whether inputs are iterable, excluding strings and scalar arrays.
 
     Parameters
     ----------
     *objs : object
         Objects to check.
     allow_sets : bool, optional
-        If this parameter is `False`, sets will not be considered list-like.
-        Default: `True`
-    func : functional object, optional
-        The function to be applied to each element. Useful ones are `all` and
-        `any`.
-        Default: `all`
+        Count sets as list-like. Default: `True`.
+    func : callable, optional
+        Combine results with `all` (default), `any`, or another callable.
+
+    Returns
+    -------
+    bool or object
+        Result from `func`; `all` and `any` return a boolean. Strings, bytes,
+        and zero-dimensional arrays are not list-like. Other iterables,
+        including dictionaries, are.
 
     Notes
     -----
-    Direct copy from pandas, with slight modification to accept *args and
-    all/any, etc, functionality by `func`.
+    Adapted from pandas to accept multiple inputs and a combining function.
     https://github.com/pandas-dev/pandas/blob/bdb00f2d5a12f813e93bc55cdcd56dcb1aae776e/pandas/_libs/lib.pyx#L1026
 
-    Note that pd.DataFrame also returns True.
+    Timing on MBP 14" [2024, macOS 26.6, M4Pro(8P+4E/G20c/N16c/48G)]
+    (2026-09-07; CPython 3.13.11, NumPy 2.5.2)::
 
-    Timing on MBP 14" [2024, macOS 26.5, M4Pro(8P+4E/G20c/N16c/48G)]
-    %timeit yfu.is_list_like("asdfaer.fits")
-    0.182 µs +- 0.005 µs per loop
-    (mean +- std. dev. of 7 runs, 100000 loops each)
+        is_list_like("asdfaer.fits")  0.188 +/- 0.001 us
+
+    Mean +/- std. dev. per call (`timeit`, 7 runs, 2,000,000 loops each).
     """
 
     def _is_list_like(obj):
@@ -69,55 +70,52 @@ def is_list_like(*objs, allow_sets: bool = True, func: Callable = all) -> bool:
     return func(_is_list_like(obj) for obj in objs)
 
 
-def listify(*objs, scalar2list: bool = True, none2list: bool = False) -> list:
-    """Make multiple objects into list of same length.
+def listify(*objs: Any, scalar2list: bool = True, none2list: bool = False) -> Any:
+    """Convert inputs to lists of the same length.
 
     Parameters
     ----------
-    objs : None, str, list-like
-        If single object, it will be converted to a list ``[obj]`` or ``obj``,
-        depending on `scalar2list`. Any scalar input will be converted to a
-        list of a target length (largest length among `objs`). If `None`, an
-        empty list (`[]`) or ``[None]`` is returned depending on `none2list`.
-        If multiple objects are given, maximum length of them is used as the
-        target length.
-
+    *objs : object
+        One or more inputs. Iterables become lists; strings count as scalars.
+        With multiple inputs, length-one lists and scalars are repeated to
+        match the longest input.
     scalar2list : bool, optional
-        If `True`, a single scalar input will be converted to a list of a
-        target length. Otherwise, it will be returned as is. Has no effect
-        on list-like inputs, which are always converted with ``list(obj)``.
-
+        Wrap a single scalar in a list. Ignored for multiple inputs and
+        iterable inputs. Default: `True`.
     none2list : bool, optional
-        Whether to return an empty list (`[]`). If `True`, ``[None]`` is
-        returned if `objs` is `None`.
-        Default: `False`
+        Return ``[None]`` for a single `None`, instead of ``[]``.
+        With multiple inputs, `None` always becomes a length-one list before
+        broadcasting. Default: `False`.
+
+    Returns
+    -------
+    list or object
+        Normalized lists, or the original single scalar when `scalar2list`
+        is `False`.
+
+    Raises
+    ------
+    ValueError
+        If no inputs are given or input lengths cannot be broadcast.
 
     Notes
     -----
-    If any obj of `None` need to be converted to a length>1 list, it will be
-    made as [None, None, ...], rather than an empty list, regardless of
-    `none2list`.
+    Timing on MBP 14" [2024, macOS 26.6, M4Pro(8P+4E/G20c/N16c/48G)]
+    (2026-09-07; CPython 3.13.11, NumPy 2.5.2)::
 
-    Timing on MBP 14" [2024, macOS 26.5, M4Pro(8P+4E/G20c/N16c/48G)]:
-    %timeit yfu.listify([12])
-    0.355 µs +- 0.006 µs per loop
-    (mean +- std. dev. of 7 runs, 100000 loops each)
-    %timeit yfu.listify("asdf")
-    0.287 µs +- 0.005 µs per loop
-    (mean +- std. dev. of 7 runs, 100000 loops each)
-    %timeit yfu.listify("asdf", scalar2list=False)
-    0.273 µs +- 0.002 µs per loop
-    (mean +- std. dev. of 7 runs, 100000 loops each)
+        listify([12])                         0.331 +/- 0.003 us
+        listify("asdf")                       0.249 +/- 0.001 us
+        listify("asdf", scalar2list=False)     0.238 +/- 0.001 us
 
+    Mean +/- std. dev. per call (`timeit`, 7 runs, 1,000,000 loops each).
+
+    Examples
+    --------
+    >>> listify([1, 2], "x", None)
+    [[1, 2], ['x', 'x'], [None, None]]
+    >>> listify(3, scalar2list=False)
+    3
     """
-
-    def _listify_single(obj, none2list=True):
-        if obj is None:
-            return [obj] if none2list else []
-        elif is_list_like(obj):
-            return list(obj)
-        else:
-            return [obj] if scalar2list else obj
 
     if len(objs) == 1:
         obj = objs[0]
@@ -127,7 +125,7 @@ def listify(*objs, scalar2list: bool = True, none2list: bool = False) -> list:
             return list(obj)
         return [obj] if scalar2list else obj
 
-    objlists = [_listify_single(obj, none2list=True) for obj in objs]
+    objlists = [list(obj) if is_list_like(obj) else [obj] for obj in objs]
     lengths = [len(obj) for obj in objlists]
     length = max(lengths)
     for objl in objlists:
@@ -138,42 +136,47 @@ def listify(*objs, scalar2list: bool = True, none2list: bool = False) -> list:
 
 
 def ndfy(item, length: int | None = None, default: Any = None) -> list:
-    """Make an item to a list of `length`.
+    """Normalize a list, replace `None`, and repeat a single item as needed.
 
     Parameters
     ----------
-    item : None, general object, list-like
-        The item to be made into a list. If `None`, it will be filled by
-        `default`.
-
+    item : object
+        Scalar or iterable to normalize.
     length : int, optional
-        The length of the final list. If `None`, the length of the input is
-        used (if `item` is a scalar, a length-1 list is returned).
+        Target length; a single item repeats, other lengths must match.
+        `None` keeps the input length, or one for a scalar.
+    default : object, optional
+        Replacement for a `None` input or top-level element. Default: `None`.
 
-    default : general object
-        The default value to be used if `item` or any element of `item` is
-        `None`. Default is `None`
+    Returns
+    -------
+    list
+        Normalized values. Nested inputs are preserved, not transposed.
+
+    Raises
+    ------
+    ValueError
+        If the input length is neither one nor the requested length.
 
     Notes
     -----
-    Useful for the cases when bezels, sigma, ... are needed. For example, if
-    ``bezel_nd = [ndfy(b, length=arr.ndim) for b in listify(bezels)]``
-    ``ndfy(bezel_nd, length=arr.ndim)`` will give correct bezel, e.g., ``[[10,
-    10], [10, 10]]`` for all of the following cases::
+    Repetition reuses references; nested mutable values are not copied.
 
-      1. ``bezel=10``
-      2. ``bezel=[10, 10]``,
-      3. ``bezel=[[10, 10], [10, 10]]``.
+    Timing on MBP 14" [2024, macOS 26.6, M4Pro(8P+4E/G20c/N16c/48G)]
+    (2026-09-07; CPython 3.13.11, NumPy 2.4.6)::
 
-    It is also useful for `slicefy`.
+        ndfy(1, length=2)  0.356 +/- 0.004 us
+        ndfy([1, None], default=0)  0.426 +/- 0.010 us
 
-    Note that some cases can be ambiguous:
-    ``ndfy([[1, 2, 3]], length=3)`` may mean either::
+    Mean +/- std. dev. per call (`timeit`, 7 runs;
+    1,000,000/500,000 loops in row order).
 
-      1. ``((1, 2, 3), (1, 2, 3), (1, 2, 3))``
-      2. ``((1, 1, 1), (2, 2, 2), (3, 3, 3))``
-
-    `ndfy` uses the first assumption.
+    Examples
+    --------
+    >>> ndfy(None, length=2, default=0)
+    [0, 0]
+    >>> ndfy([[1, 2]], length=2)
+    [[1, 2], [1, 2]]
     """
     item = [default if i is None else i for i in listify(item, none2list=True)]
     item_length = len(item)
