@@ -1,4 +1,5 @@
 from numbers import Integral
+from typing import Optional, Union
 
 from .lists import is_list_like, listify, ndfy
 
@@ -12,7 +13,7 @@ __all__ = [
 
 # TODO: add `coord` to select whether image/physical. If physical, header is required.
 def slicefy(
-    rule: str | int | list[int] | list[slice] | None = None,
+    rule: Optional[Union[str, int, list[int], list[slice]]] = None,
     ndim: int = 2,
     order_xyz: bool = True,
     fits_convention: bool = True,
@@ -293,7 +294,7 @@ def _fitsify_slice(slices: list) -> list:
     return fits_slice
 
 
-def slice_to_string(slices: tuple | list, fits_convention: bool = True) -> str:
+def slice_to_string(slices: Union[tuple, list], fits_convention: bool = True) -> str:
     """Serialize Python slices as a FITS or Python section string.
 
     Parameters
@@ -346,7 +347,7 @@ def slice_to_string(slices: tuple | list, fits_convention: bool = True) -> str:
 
 
 def bezel2slice(
-    rule: int | list[int] | None = None, ndim: int = 2, order_xyz: bool = True
+    rule: Optional[Union[int, list[int]]] = None, ndim: int = 2, order_xyz: bool = True
 ) -> tuple[slice, ...]:
     """Convert edge-trim widths to NumPy slices.
 

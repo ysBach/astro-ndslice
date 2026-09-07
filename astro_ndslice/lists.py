@@ -2,7 +2,7 @@
 
 from collections import abc
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -135,7 +135,7 @@ def listify(*objs: Any, scalar2list: bool = True, none2list: bool = False) -> An
     return [obj * length if len(obj) == 1 else obj for obj in objlists]
 
 
-def ndfy(item, length: int | None = None, default: Any = None) -> list:
+def ndfy(item, length: Optional[int] = None, default: Any = None) -> list:
     """Normalize a list, replace `None`, and repeat a single item as needed.
 
     Parameters
