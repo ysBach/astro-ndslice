@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -315,8 +315,8 @@ def offsets2slice(
 def calc_offset_wcs(
     target,
     reference,
-    loc_target: Union[str, ArrayLike] = "center",
-    loc_reference: Union[str, ArrayLike] = "center",
+    loc_target: str | ArrayLike = "center",
+    loc_reference: str | ArrayLike = "center",
     order_xyz: bool = True,
     intify_offset: bool = False,
 ) -> np.ndarray:

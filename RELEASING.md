@@ -23,10 +23,10 @@ See [PyPI's setup guide](https://docs.pypi.org/trusted-publishers/adding-a-publi
 Use one Bash/zsh session in the repository root, with `uv` and authenticated `gh`.
 Commit or merge the intended changes onto `main` first.
 
-1. **Set the version.** Replace `0.5.0` with the intended release version.
+1. **Set the version.** Replace `1.2.3` with the intended release version.
 
    ```bash
-   release_version=0.5.0
+   release_version=1.2.3
    git switch main &&
    uv version "$release_version" --no-sync
    ```
@@ -35,7 +35,7 @@ Commit or merge the intended changes onto `main` first.
    syncing any environment. No separate Python version constant is maintained.
 
 2. **Date the release notes.** Rename `## Unreleased` in `CHANGELOG.md` to
-   `## v0.5.0 (YYYY-MM-DD)`, using the version above and actual release date.
+   `## v1.2.3 (YYYY-MM-DD)`, using the version above and actual release date.
    Keep this release's bullets below it. Validate with the project `.venv`:
 
    ```bash
@@ -60,6 +60,7 @@ Commit or merge the intended changes onto `main` first.
 5. **Tag that commit and publish the GitHub release.**
 
    ```bash
+   release_version=1.2.3
    git tag -a "v$release_version" -m "Release $release_version" &&
    git push origin "v$release_version" &&
    gh release create "v$release_version" --verify-tag \
@@ -74,7 +75,7 @@ Commit or merge the intended changes onto `main` first.
 - Package and lockfile versions must match. Releases also require a matching
   `v{version}` tag and a dated, nonempty changelog entry.
 - Hatchling builds one universal wheel and one sdist with `uv build --no-sources`.
-- CI tests installed wheels on Python 3.9–3.14 and the sdist on Python 3.13,
+- CI tests installed wheels on Python 3.10–3.14 and the sdist on Python 3.13,
   outside the checkout. Astropy tests, docstrings, formatting, and lint must pass.
 - Publishing uploads those tested artifacts, without rebuilding. The sdist
   includes tests and public docs; local files and workflows are excluded.

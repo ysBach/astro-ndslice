@@ -10,7 +10,7 @@ Slice NumPy arrays, convert FITS/IRAF sections, and align images by pixel offset
 pip install astro-ndslice
 ```
 
-Python >= 3.9.
+Python >= 3.10.
 
 For astronomers who need WCS/header offset helpers:
 

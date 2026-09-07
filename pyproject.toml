@@ -17,7 +17,6 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -27,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Image Processing",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
@@ -60,7 +59,7 @@ testpaths = ["astro_ndslice/tests"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.per-file-target-version]
 ".github/**/*.py" = "py313"
@@ -76,6 +75,6 @@ extra_standard_library = ["tomllib"]
 dev = [
     "astropy>=5.3.3",
     "isort",
-    "pytest>=7",
+    "pytest>=9.0.3",
     "ruff>=0.15.14",
 ]

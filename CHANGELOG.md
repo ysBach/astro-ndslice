@@ -3,10 +3,6 @@
 ## Unreleased
 
 ### Fixes
-
-- **Python 3.9:** installation required Python 3.10+, and imports used
-  incompatible type annotations. Now supports Python 3.9+, including CI tests
-  of the installed wheel.
 - **Image placement:** slice tuples work directly as NumPy indices. Canvas and
   overlap sizes use the same rounded offsets, including half-pixel shifts.
   - `offsets2slice(..., fits_convention=False)` returned lists of slices, causing

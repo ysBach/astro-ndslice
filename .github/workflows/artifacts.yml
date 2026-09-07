@@ -52,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         distribution: [wheel]
         include:
           - python-version: "3.13"
@@ -84,6 +84,8 @@ jobs:
           fi
           uv pip install --python "$RUNNER_TEMP/artifact-venv/bin/python" \
             "$artifact[full]" 'pytest>=7'
+          uv pip list --python "$RUNNER_TEMP/artifact-venv/bin/python"
+          uv pip check --python "$RUNNER_TEMP/artifact-venv/bin/python"
           mkdir -p "$RUNNER_TEMP/astro-ndslice-tests"
           test_source="$GITHUB_WORKSPACE/astro_ndslice/tests"
           if [ "$DISTRIBUTION" = "sdist" ]; then
