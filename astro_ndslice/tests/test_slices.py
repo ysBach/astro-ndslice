@@ -32,6 +32,18 @@ def test_slice_from_string():
     with pytest.raises(ValueError):
         slice_from_string("1:2")
 
+    # Empty brackets are the inverse of the empty input string.
+    assert slice_from_string("[]") == ()
+
+    with pytest.raises(ValueError, match="step cannot be zero"):
+        slice_from_string("[1:2:0]", fits_convention=True)
+    with pytest.raises(ValueError, match="index"):
+        slice_from_string("[0:2]", fits_convention=True)
+    with pytest.raises(ValueError, match="index"):
+        slice_from_string("[1:0]", fits_convention=True)
+    with pytest.raises(ValueError, match="incompatible"):
+        slice_from_string("[1:2:-1]", fits_convention=True)
+
 
 def test_bezel2slice():
     arr = np.arange(100).reshape(10, 10)
@@ -56,6 +68,8 @@ def test_bezel2slice():
         arr[bezel2slice([3, 4], order_xyz=False)],
         np.array([[34, 35], [44, 45], [54, 55], [64, 65]]),
     )
+
+    assert bezel2slice(None, ndim=3) == (slice(None),) * 3
 
 
 def test_defitsify_slice():
@@ -138,6 +152,14 @@ def test_slicefy():
     with pytest.raises(TypeError):
         slicefy(1.0)
 
+    assert slicefy((slice(1, 3) for _ in range(1)), ndim=2) == (
+        slice(1, 3),
+        slice(1, 3),
+    )
+    assert slicefy((1 for _ in range(1)), ndim=2) == bezel2slice(1, ndim=2)
+    with pytest.raises(ValueError, match="at least one"):
+        slicefy(iter(()))
+
 
 def test_fitsify_slice():
     # round-trip: defitsify then fitsify must be identity
@@ -181,3 +203,46 @@ def test_slice_to_string():
     py_sl = slice_from_string("[1:3,2:5]", fits_convention=True)
     assert slice_to_string(py_sl) == "[1:3,2:5]"
     assert_array_equal(arr2d[py_sl], arr2d[1:5, 0:3])
+
+    assert slice_to_string(()) == "[]"
+
+
+@pytest.mark.parametrize(
+    ("original", "expected"),
+    [
+        (slice(None, None, -1), "[:1:-1]"),
+        (slice(None, 1, -2), "[:3:-2]"),
+        (slice(9, None, -1), "[10:1]"),
+        (slice(9, 0, -2), "[10:2:2]"),
+        (slice(8, 1, -3), "[9:3:3]"),
+        # A one-element descending slice has equal serialized endpoints but
+        # remains non-empty after parsing.
+        (slice(2, 1, -1), "[3:3]"),
+    ],
+)
+def test_slice_to_string_reverse_roundtrip(original, expected):
+    values = np.arange(15)
+    encoded = slice_to_string((original,))
+    assert encoded == expected
+    recovered = slice_from_string(encoded, fits_convention=True)
+    for size in range(values.size + 1):
+        np.testing.assert_array_equal(
+            values[:size][(original,)], values[:size][recovered]
+        )
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        slice(2, 2),
+        slice(2, 2, -1),
+        slice(2, 1, 2),
+        slice(0, 0, -1),
+        slice(-1, None),
+        slice(None, -1),
+        slice(None, None, 0),
+    ],
+)
+def test_slice_to_string_rejects_unrepresentable_slices(original):
+    with pytest.raises(ValueError):
+        slice_to_string((original,))
