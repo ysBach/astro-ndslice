@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+
+if TYPE_CHECKING:
+    from astropy.io.fits import Header
 
 from astro_ndslice import (
     calc_offset_physical,
@@ -490,11 +495,15 @@ NAXIS2  =                   91""",
         np.array([-9.5, -17.5]),
     )
 
-    with pytest.raises(NotImplementedError):
-        calc_offset_physical(hdr, reference=hdr2, ignore_ltm=False)
+    assert_allclose(
+        calc_offset_physical(hdr, reference=hdr2, ignore_ltm=False),
+        np.array([-8.6, -19.3]),
+    )
 
-    with pytest.raises(NotImplementedError):
-        calc_offset_physical(hdr, reference=hdr4, ignore_ltm=False)
+    assert_allclose(
+        calc_offset_physical(hdr, reference=hdr4, ignore_ltm=False),
+        np.array([-9.5, -18.5]),
+    )
 
     with pytest.raises(TypeError):
         calc_offset_physical("asdf", reference=hdr4)
@@ -505,6 +514,100 @@ NAXIS2  =                   91""",
     assert_allclose(calc_offset_physical(hdr5), np.array([0, 0]))
 
     assert_allclose(calc_offset_physical(hdr, reference=hdr5), np.array([-9.5, -19.0]))
+
+
+def _header_with_ltm(ltv: Any, ltm: Any = None) -> "Header":
+    fits = pytest.importorskip("astropy.io.fits")
+    ltv = np.atleast_1d(np.asarray(ltv))
+    header = fits.Header({"NAXIS": ltv.size})
+    for i, value in enumerate(ltv, start=1):
+        header[f"LTV{i}"] = value
+    if ltm is not None:
+        ltm = np.asarray(ltm)
+        for i, row in enumerate(ltm, start=1):
+            for j, value in enumerate(row, start=1):
+                header[f"LTM{i}_{j}"] = value
+    return header
+
+
+def test_calc_offset_physical_solves_ltm_in_shared_physical_units() -> None:
+    target_origin = np.array([4.25, -2.5])
+    reference_origin = np.array([-3.25, 5.5])
+    target_ltm = np.array([[2.0, 0.5], [0.0, -4.0]])
+    reference_ltm = np.array([[1.0, 0.25], [0.0, 2.0]])
+    target = _header_with_ltm(-target_ltm @ target_origin, target_ltm)
+    reference = _header_with_ltm(-reference_ltm @ reference_origin, reference_ltm)
+    expected = reference_origin - target_origin
+
+    assert_allclose(calc_offset_physical(target, reference, ignore_ltm=False), expected)
+    assert_allclose(
+        calc_offset_physical(target, reference, ignore_ltm=False, order_xyz=False),
+        expected[::-1],
+    )
+    assert_allclose(
+        calc_offset_physical(target, reference, ignore_ltm=False, intify_offset=True),
+        np.array([-8, 8]),
+    )
+    assert_allclose(calc_offset_physical(target, ignore_ltm=False), -target_origin)
+
+
+def test_calc_offset_physical_corrects_ltm_unless_ignored() -> None:
+    header = _header_with_ltm([8.0, -6.0], [[2.0, 0.0], [0.0, 3.0]])
+
+    assert_allclose(calc_offset_physical(header), [4.0, -2.0])
+    assert_allclose(calc_offset_physical(header, ignore_ltm=False), [4.0, -2.0])
+    assert_allclose(calc_offset_physical(header, ignore_ltm=True), [8.0, -6.0])
+
+    header["LTM1_1"] = 0
+    with pytest.raises(ValueError, match="nonsingular"):
+        calc_offset_physical(header)
+    assert_allclose(calc_offset_physical(header, ignore_ltm=True), [8.0, -6.0])
+
+
+def test_calc_offset_physical_shear_keyword_order() -> None:
+    fits = pytest.importorskip("astropy.io.fits")
+    # NOAO convention: logical_x = physical_x + 2*physical_y + LTV1.
+    header = fits.Header({"NAXIS": 2, "LTM1_2": 2, "LTV2": 1})
+    assert_allclose(calc_offset_physical(header, ignore_ltm=False), [-2, 1])
+
+
+def test_calc_offset_physical_accepts_aliases_and_rejects_conflicts() -> None:
+    header = _header_with_ltm([8.0, -6.0])
+    header["LTM1"] = 2.0
+    header["LTM2"] = 3.0
+
+    assert_allclose(calc_offset_physical(header, ignore_ltm=False), [4.0, -2.0])
+
+    header["LTM1_1"] = 2.0
+    header["LTM1"] = 3.0
+    with pytest.raises(ValueError, match="disagree"):
+        calc_offset_physical(header, ignore_ltm=False)
+
+
+@pytest.mark.parametrize(
+    ("ltm", "ltv", "message"),
+    [
+        ([[1.0, 2.0], [2.0, 4.0]], [1.0, 1.0], "nonsingular"),
+        ([["nan", 0.0], [0.0, 1.0]], [1.0, 1.0], "finite"),
+        ([["inf", 0.0], [0.0, 1.0]], [1.0, 1.0], "finite"),
+        ([[1.0, 0.0], [0.0, 1.0]], ["nan", 1.0], "LTV"),
+        ([[1.0, 0.0], [0.0, 1.0]], ["inf", 1.0], "LTV"),
+        ([[1.0, 0.0], [0.0, 1.0]], [1 + 2j, 1.0], "LTV"),
+    ],
+)
+def test_calc_offset_physical_rejects_invalid_affine_terms(ltm, ltv, message) -> None:
+    header = _header_with_ltm(ltv, ltm)
+
+    with pytest.raises(ValueError, match=message):
+        calc_offset_physical(header, ignore_ltm=False)
+
+
+def test_calc_offset_physical_rejects_mismatched_dimensions() -> None:
+    target = _header_with_ltm([0.0, 0.0])
+    reference = _header_with_ltm([0.0])
+
+    with pytest.raises(ValueError, match="matching NAXIS"):
+        calc_offset_physical(target, reference, ignore_ltm=False)
 
 
 @pytest.mark.parametrize("stack_axis", [False, True])
@@ -613,19 +716,3 @@ def test_calc_offset_wcs_requires_shape_only_for_center() -> None:
         calc_offset_wcs(wcs, wcs, loc_target=[2, 3], loc_reference=[2, 3]),
         [0, 0],
     )
-
-
-@pytest.mark.parametrize(
-    ("key", "value"),
-    [("LTM1_1", 2), ("LTM1_1", 0), ("LTM1_2", 1), ("LTM1", 2), ("LTM1_1", "nan")],
-)
-@pytest.mark.parametrize("as_reference", [False, True])
-def test_calc_offset_physical_rejects_nonidentity_ltm(
-    key: str, value, as_reference: bool
-) -> None:
-    fits = pytest.importorskip("astropy.io.fits")
-    header = fits.Header({"NAXIS": 2, key: value})
-    identity = fits.Header({"NAXIS": 2})
-    target, reference = (identity, header) if as_reference else (header, identity)
-    with pytest.raises(NotImplementedError, match="identity"):
-        calc_offset_physical(target, reference, ignore_ltm=False)

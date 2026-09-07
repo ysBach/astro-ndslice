@@ -1,5 +1,10 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 from numpy.typing import ArrayLike
+
+if TYPE_CHECKING:
+    from astropy.io.fits import Header
 
 __all__ = [
     "regularize_offsets",
@@ -413,58 +418,59 @@ def calc_offset_wcs(
         return offset[::-1]
 
 
-def _check_ltm(hdr):
-    ndim = hdr["NAXIS"]
-    for i in range(ndim):
-        for j in range(ndim):
-            key = f"LTM{i + 1}_{j + 1}"
-            try:
-                value = float(hdr[key])
-            except (KeyError, IndexError):
-                continue
-            except (TypeError, ValueError) as exc:
-                raise NotImplementedError(
-                    "Only an identity LTM matrix is supported."
-                ) from exc
-            if not np.isfinite(value) or value != float(i == j):
-                raise NotImplementedError("Only an identity LTM matrix is supported.")
-
-        try:  # Sometimes LTM matrix is saved as ``LTMi``, not ``LTMi_j``.
-            value = float(hdr[f"LTM{i + 1}"])
-        except (KeyError, IndexError):
-            continue
-        except (TypeError, ValueError) as exc:
-            raise NotImplementedError(
-                "Only an identity LTM matrix is supported."
-            ) from exc
-        if not np.isfinite(value) or value != 1.0:
-            raise NotImplementedError("Only an identity LTM matrix is supported.")
+def _physical_translation(hdr: "Header", ltv: np.ndarray) -> np.ndarray:
+    """Solve the header's LTM/LTV translation in physical-coordinate units."""
+    ndim = ltv.size
+    ltm = np.empty((ndim, ndim))
+    try:
+        for i in range(ndim):
+            for j in range(ndim):
+                key = f"LTM{i + 1}_{j + 1}"
+                value = float(hdr.get(key, float(i == j)))
+                if i == j and f"LTM{i + 1}" in hdr:
+                    alias = float(hdr[f"LTM{i + 1}"])
+                    if key in hdr and value != alias:
+                        raise ValueError(f"{key} and LTM{i + 1} disagree.")
+                    value = alias
+                ltm[i, j] = value
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid LTM values: {exc}") from exc
+    if not np.all(np.isfinite(ltm)):
+        raise ValueError("LTM must contain finite numeric values.")
+    try:
+        translation = np.linalg.solve(ltm, ltv)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("LTM must be nonsingular.") from exc
+    if not np.all(np.isfinite(translation)):
+        raise ValueError("LTM/LTV translation exceeds the floating-point range.")
+    return translation
 
 
 def calc_offset_physical(
     target,
     reference=None,
     order_xyz: bool = True,
-    ignore_ltm: bool = True,
+    ignore_ltm: bool = False,
     intify_offset: bool = False,
 ) -> np.ndarray:
-    """Subtract FITS header LTV values to obtain a pixel offset.
+    """Subtract FITS translation terms, optionally correcting for LTM scaling.
 
     Parameters
     ----------
     target : astropy.io.fits.Header
-        Header containing `NAXIS` and optional ``LTVi`` keywords.
-        Missing ``LTVi`` values default to zero.
+        Header containing `NAXIS` and optional ``LTVi``/``LTMi_j`` keywords.
+        Missing LTV values default to zero; missing LTM entries to identity.
+        ``LTMi`` is accepted as a diagonal alias; conflicting aliases raise.
     reference : astropy.io.fits.Header, optional
-        Subtract this header's LTV values. `None` returns the target's values.
-        Default: `None`.
+        Header in the same physical frame, with matching `NAXIS`.
+        `None` subtracts zero. Default: `None`.
     order_xyz : bool, optional
         Return offsets in xyz order; use `False` for NumPy axis order.
         Default: `True`.
     ignore_ltm : bool, optional
-        Skip LTM validation. If `False`, require an identity matrix;
-        this helper does not apply scaling or other transforms.
-        Default: `True`.
+        Set `True` to subtract raw LTV values without applying LTM.
+        By default, solve ``LTM @ shift = LTV`` for each header first.
+        Supports any finite, nonsingular LTM. Default: `False`.
     intify_offset : bool, optional
         Round the result to integers using nearest-even rounding.
         Default: `False`.
@@ -472,29 +478,51 @@ def calc_offset_physical(
     Returns
     -------
     ndarray
-        Target LTV values minus reference LTV values, in the requested order.
+        Target minus reference translation terms, in the requested order.
+        With `ignore_ltm=False`, units are shared physical-coordinate pixels.
 
     Raises
     ------
     TypeError
         If an input is not an Astropy FITS Header.
-    NotImplementedError
-        If LTM validation is enabled and the matrix is not the identity.
+    ValueError
+        If dimensions or LTV values are invalid, or an applied LTM is
+        nonfinite, singular, or has conflicting diagonal aliases.
 
     Notes
     -----
-    Reads LTV/LTM directly from FITS headers; WCS inputs are not accepted.
+    IRAF defines ``logical = LTM @ physical + LTV``. The corrected result is
+    ``solve(LTM_target, LTV_target) - solve(LTM_reference, LTV_reference)``:
+    reference minus target physical locations at logical coordinate zero.
+    This preserves the existing LTV sign; logical zero is not NumPy pixel zero.
+    It is a translation-term difference, not a full image-to-image transform.
+    These units differ from scaled image pixels. Differing LTMs require
+    resampling for full image alignment.
+
+    Missing LTM entries retain this package's identity defaults, including
+    partially specified matrices.
 
     Setup: ``h = Header(dict(NAXIS=2, LTV1=-9.5, LTV2=-19,
-    LTM1_1=1, LTM2_2=1))``. Header construction is excluded.
+    LTM1_1=1, LTM2_2=1))``; ``h_scaled`` uses both diagonals = 0.5.
+    Header construction is excluded.
 
     Timing on MBP 14" [2024, macOS 26.6, M4Pro(8P+4E/G20c/N16c/48G)]
     (2026-09-07; CPython 3.13.11, NumPy 2.4.6, Astropy 7.2.0)::
 
-        calc_offset_physical(h)  4.644 +/- 0.066 us
-        calc_offset_physical(h, ignore_ltm=False)  13.234 +/- 0.163 us
+        calc_offset_physical(h, ignore_ltm=True)  5.894 +/- 0.053 us
+        calc_offset_physical(h)  16.813 +/- 0.131 us
+        calc_offset_physical(h_scaled)  16.822 +/- 0.190 us
 
-    Mean +/- std. dev. per call (`timeit`, 7 runs; 50,000/20,000 loops in row order).
+    Mean +/- std. dev. per call (`timeit`, 7 runs; 20,000 loops each).
+
+    Examples
+    --------
+    >>> from astropy.io.fits import Header
+    >>> h = Header(dict(NAXIS=1, LTV1=6, LTM1_1=2))
+    >>> calc_offset_physical(h)
+    array([3.])
+    >>> calc_offset_physical(h, ignore_ltm=True)
+    array([6])
     """
     from astropy.io.fits import Header
 
@@ -505,29 +533,23 @@ def calc_offset_physical(
         if not isinstance(reference, Header):
             raise TypeError("reference must be an instance of astropy.io.fits.Header.")
 
-    if not ignore_ltm:
-        _check_ltm(target)
-        if do_ref:
-            _check_ltm(reference)
-
     ndim = target["NAXIS"]
-    ltvs_obj = []
-    for i in range(ndim):
-        try:
-            ltvs_obj.append(target[f"LTV{i + 1}"])
-        except (KeyError, IndexError):
-            ltvs_obj.append(0)
+    if not isinstance(ndim, (int, np.integer)) or ndim < 1:
+        raise ValueError("NAXIS must be a positive integer.")
+    if do_ref and reference["NAXIS"] != ndim:
+        raise ValueError("target and reference must have matching NAXIS.")
 
-    if do_ref:
-        ltvs_ref = []
-        for i in range(ndim):
-            try:
-                ltvs_ref.append(reference[f"LTV{i + 1}"])
-            except (KeyError, IndexError):
-                ltvs_ref.append(0)
-        offset = np.array(ltvs_obj) - np.array(ltvs_ref)
-    else:
-        offset = np.array(ltvs_obj)
+    translations = []
+    for header in (target, reference) if do_ref else (target,):
+        try:
+            ltv = np.array([header.get(f"LTV{i + 1}", 0) for i in range(ndim)])
+            finite = not np.iscomplexobj(ltv) and np.all(np.isfinite(ltv))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("LTV must contain finite numeric values.") from exc
+        if not finite:
+            raise ValueError("LTV must contain finite numeric values.")
+        translations.append(ltv if ignore_ltm else _physical_translation(header, ltv))
+    offset = translations[0] - translations[1] if do_ref else translations[0]
 
     if intify_offset:
         offset = np.around(offset).astype(int)
