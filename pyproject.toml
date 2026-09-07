@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "astro-ndslice"
@@ -17,39 +17,65 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Education",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Image Processing",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
-full = ["astropy"]
-dev  = ["astropy", "pytest", "ruff"]
+# Avoid older Astropy metadata that incorrectly permits NumPy 2.
+full = ["astropy>=5.3.3"]
+dev  = ["astropy>=5.3.3", "isort", "pytest", "ruff"]
 
 [project.urls]
 Source = "https://github.com/ysBach/astro-ndslice"
 Tracker = "https://github.com/ysBach/astro-ndslice/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.hatch.build.targets.wheel]
+packages = ["astro_ndslice"]
+exclude = ["/astro_ndslice/tests"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/astro_ndslice",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/RELEASING.md",
+    "/LICENSE",
+    "/pyproject.toml",
+    "/uv.lock",
+]
+exclude = ["**/__pycache__", "**/*.pyc", "**/.DS_Store"]
 
 [tool.pytest.ini_options]
 testpaths = ["astro_ndslice/tests"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py39"
+
+[tool.ruff.per-file-target-version]
+".github/**/*.py" = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 
+[tool.isort]
+profile = "black"
+extra_standard_library = ["tomllib"]
+
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "astropy>=5.3.3",
+    "isort",
+    "pytest>=7",
     "ruff>=0.15.14",
 ]

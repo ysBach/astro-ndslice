@@ -1,0 +1,129 @@
+name: Build and test distributions
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        description: Require release notes and validate tags
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --python 3.13
+      - name: Check release metadata
+        id: version
+        env:
+          CHECK_RELEASE: ${{ inputs.release }}
+        shell: bash
+        run: |
+          args=()
+          if [ "$CHECK_RELEASE" = "true" ]; then
+            args+=(--release)
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            args+=(--tag "$GITHUB_REF_NAME")
+          fi
+          uv run --no-sync python .github/scripts/check_release.py "${args[@]}"
+      - name: Test release validation
+        run: uv run --no-sync pytest .github/tests -q
+      - name: Build wheel and source distribution
+        run: uv build --no-sources
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+          if-no-files-found: error
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        distribution: [wheel]
+        include:
+          - python-version: "3.13"
+            distribution: sdist
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+      - name: Install distribution in a fresh environment
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        shell: bash
+        run: |
+          uv venv --python "$PYTHON_VERSION" "$RUNNER_TEMP/artifact-venv"
+          shopt -s nullglob
+          wheels=("$GITHUB_WORKSPACE"/dist/*.whl)
+          sdists=("$GITHUB_WORKSPACE"/dist/*.tar.gz)
+          test "${#wheels[@]}" -eq 1
+          test "${#sdists[@]}" -eq 1
+          artifact="${wheels[0]}"
+          if [ "$DISTRIBUTION" = "sdist" ]; then
+            artifact="${sdists[0]}"
+          fi
+          uv pip install --python "$RUNNER_TEMP/artifact-venv/bin/python" \
+            "$artifact[full]" 'pytest>=7'
+          mkdir -p "$RUNNER_TEMP/astro-ndslice-tests"
+          test_source="$GITHUB_WORKSPACE/astro_ndslice/tests"
+          if [ "$DISTRIBUTION" = "sdist" ]; then
+            mkdir -p "$RUNNER_TEMP/astro-ndslice-source"
+            tar -xzf "$artifact" -C "$RUNNER_TEMP/astro-ndslice-source"
+            sources=("$RUNNER_TEMP"/astro-ndslice-source/*)
+            test "${#sources[@]}" -eq 1
+            for document in README.md CHANGELOG.md RELEASING.md LICENSE; do
+              test -f "${sources[0]}/$document"
+            done
+            test_source="${sources[0]}/astro_ndslice/tests"
+          fi
+          cp -R "$test_source" "$RUNNER_TEMP/astro-ndslice-tests/tests"
+      - name: Verify installed package and run tests
+        env:
+          EXPECTED_VERSION: ${{ needs.build.outputs.version }}
+        shell: bash
+        run: |
+          unset PYTHONPATH
+          cd "$RUNNER_TEMP/astro-ndslice-tests"
+          "$RUNNER_TEMP/artifact-venv/bin/python" - <<'PY'
+          import os
+          import sysconfig
+          from importlib.metadata import version
+          from pathlib import Path
+
+          import astro_ndslice
+          import pytest
+
+          assert version("astro-ndslice") == os.environ["EXPECTED_VERSION"]
+          roots = {
+              Path(sysconfig.get_path(key)).resolve()
+              for key in ("purelib", "platlib")
+          }
+          assert any(
+              Path(astro_ndslice.__file__).resolve().is_relative_to(root)
+              for root in roots
+          ), "Tests must import the installed distribution"
+          raise SystemExit(pytest.main([
+              "tests", "--doctest-modules",
+              str(Path(astro_ndslice.__file__).resolve().parent), "-q",
+          ]))
+          PY
